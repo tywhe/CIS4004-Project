@@ -1,4 +1,4 @@
-/* Shared styles for login + dashboard (no JavaScript) */
+/* Login + dashboard (portfolio UI) */
 
 :root {
   --text: #374151;
@@ -200,7 +200,6 @@ body {
   border-right: none;
 }
 
-/* Sort affordance (static visual; wire-up later with JS) */
 .th-sort {
   display: inline-flex;
   align-items: center;
@@ -216,7 +215,6 @@ body {
   user-select: none;
 }
 
-/* Green emphasis under "% of account" per reference */
 .th-pct-account {
   box-shadow: inset 0 -2px 0 var(--accent);
 }

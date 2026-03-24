@@ -1,11 +1,12 @@
 {
   "name": "cis4004-project",
   "private": true,
-  "description": "Portfolio app — Express serves static HTML templates",
+  "description": "Portfolio app — Express serves the Vite/React production build",
   "main": "server.js",
   "scripts": {
+    "build": "npm run build --prefix client/reactapp",
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "npm run dev --prefix client/reactapp"
   },
   "dependencies": {
     "express": "^4.21.2"

@@ -1,0 +1,13 @@
+{
+  "name": "cis4004-project",
+  "private": true,
+  "description": "Portfolio app — Express serves static HTML templates",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

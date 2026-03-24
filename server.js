@@ -1,16 +1,15 @@
 const express = require('express');
+const path = require('path');
+
 const app = express();
 const PORT = 8080;
 
-app.get("/", (req, res) => {
-    res.send("Hello World!");
-});
+const staticRoot = path.join(__dirname, 'client', 'html-templates');
 
-app.get("/other", (req, res) => {
-    res.send("Hello Again!");
-});
+app.use(express.static(staticRoot));
 
-app.listen(PORT, () =>{
-    console.log("Now listening on port" + PORT);
-
+app.listen(PORT, () => {
+  console.log(`Listening on http://localhost:${PORT}`);
+  console.log(`Dashboard: http://localhost:${PORT}/`);
+  console.log(`Login:     http://localhost:${PORT}/login.html`);
 });

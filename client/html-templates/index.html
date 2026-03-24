@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Portfolio dashboard</title>
+    <link rel="stylesheet" href="portfolio.css" />
+  </head>
+  <body>
+    <div class="dashboard-page">
+      <header class="dashboard-header">
+        <div>
+          <h1>Portfolio</h1>
+          <p>Holdings overview — data will load from your API / MongoDB later.</p>
+        </div>
+        <nav>
+          <a href="login.html">Sign out (link placeholder)</a>
+        </nav>
+      </header>
+
+      <div class="table-wrap">
+        <table class="portfolio-table">
+          <caption class="caption">
+            Positions table — columns match your portfolio view.
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">
+                <span class="th-sort"
+                  >Symbol<span class="sort-arrows" aria-hidden="true"
+                    ><span>▲</span><span>▼</span></span
+                  ></span
+                >
+              </th>
+              <th scope="col" class="num">
+                <span class="th-sort"
+                  >Last price<span class="sort-arrows" aria-hidden="true"
+                    ><span>▲</span><span>▼</span></span
+                  ></span
+                >
+              </th>
+              <th scope="col" class="num">
+                <span class="th-sort"
+                  >Today's gain/loss<span
+                    class="sort-arrows"
+                    aria-hidden="true"
+                    ><span>▲</span><span>▼</span></span
+                  ></span
+                >
+              </th>
+              <th scope="col" class="num">
+                <span class="th-sort"
+                  >Total gain/loss<span class="sort-arrows" aria-hidden="true"
+                    ><span>▲</span><span>▼</span></span
+                  ></span
+                >
+              </th>
+              <th scope="col" class="num">
+                <span class="th-sort"
+                  >Current value<span class="sort-arrows" aria-hidden="true"
+                    ><span>▲</span><span>▼</span></span
+                  ></span
+                >
+              </th>
+              <th scope="col" class="num">
+                <span class="th-sort"
+                  >Cost basis<span class="sort-arrows" aria-hidden="true"
+                    ><span>▲</span><span>▼</span></span
+                  ></span
+                >
+              </th>
+              <th scope="col" class="num">
+                <span class="th-sort"
+                  >Quantity<span class="sort-arrows" aria-hidden="true"
+                    ><span>▲</span><span>▼</span></span
+                  ></span
+                >
+              </th>
+              <th scope="col" class="num th-pct-account">
+                <span class="th-sort"
+                  >% of account<span class="sort-arrows" aria-hidden="true"
+                    ><span>▲</span><span>▼</span></span
+                  ></span
+                >
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="placeholder-row">
+              <td colspan="8">No holdings yet — rows will be rendered from the database.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </body>
+</html>

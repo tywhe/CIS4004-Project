@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign in — Portfolio</title>
+    <link rel="stylesheet" href="portfolio.css" />
+  </head>
+  <body>
+    <main class="login-page">
+      <div class="login-card">
+        <h1>Sign in</h1>
+        <p class="subtitle">
+          Access your investment portfolio builder. Credentials will be verified
+          against your database when the backend is connected.
+        </p>
+        <!--
+          Replace action with your Express route (e.g. POST /api/login) once
+          MongoDB-backed auth is implemented. method="post" is appropriate for login.
+        -->
+        <form method="post" action="#">
+          <div class="field">
+            <label for="email">Email</label>
+            <input
+              type="email"
+              id="email"
+              name="email"
+              autocomplete="username"
+              required
+              placeholder="you@example.com"
+            />
+          </div>
+          <div class="field">
+            <label for="password">Password</label>
+            <input
+              type="password"
+              id="password"
+              name="password"
+              autocomplete="current-password"
+              required
+              placeholder="••••••••"
+            />
+          </div>
+          <div class="login-actions">
+            <button type="submit">Sign in</button>
+          </div>
+        </form>
+        <p class="login-hint">
+          Template only — form submits nowhere until the server route exists.
+        </p>
+      </div>
+    </main>
+  </body>
+</html>

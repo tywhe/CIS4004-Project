@@ -5,6 +5,8 @@ const mongoose = require('mongoose');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
+const cors = require('cors')
+app.use(cors());
 
 // Connect to MongoDB
 mongoose.connect('mongodb://localhost:27017/admin')
@@ -60,7 +62,6 @@ if (!fs.existsSync(indexHtml)) {
       'For local development with hot reload, use:\n' +
       '  npm run dev',
   );
-  process.exit(1);
 }
 
 app.use(express.static(distPath));

@@ -9,6 +9,7 @@
     "dev": "npm run dev --prefix client/reactapp"
   },
   "dependencies": {
+    "cors": "^2.8.6",
     "express": "^4.21.2",
     "mongoose": "^9.3.3"
   }

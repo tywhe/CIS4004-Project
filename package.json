@@ -9,8 +9,11 @@
     "dev": "npm run dev --prefix client/reactapp"
   },
   "dependencies": {
+    "@tailwindcss/vite": "^4.2.2",
+    "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "express": "^4.21.2",
-    "mongoose": "^9.3.3"
+    "mongoose": "^9.3.3",
+    "tailwindcss": "^4.2.2"
   }
 }

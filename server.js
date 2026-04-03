@@ -2,6 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -9,14 +10,15 @@ const cors = require('cors')
 app.use(cors());
 
 // Connect to MongoDB
-mongoose.connect('mongodb://localhost:27017/admin')
+// Create a database for your app (e.g. "portfolio") and a "users" collection inside it.
+mongoose.connect('mongodb://localhost:27017/portfolio')
   .then(() => console.log('MongoDB connected'))
   .catch((err) => console.log('MongoDB error:', err));
 
 // User model
 const UserSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
+  passwordHash: { type: String, required: true },
   role: { type: String, default: "user" }
 });
 const User = mongoose.model('User', UserSchema);
@@ -28,7 +30,9 @@ app.use(express.json());
 app.post('/api/auth/register', async (req, res) => {
   const { email, password } = req.body;
   try {
-    const user = new User({ email, password });
+    // Never store plaintext passwords in MongoDB.
+    const passwordHash = await bcrypt.hash(password, 10);
+    const user = new User({ email, passwordHash });
     await user.save();
     res.json({ message: 'User created' });
   } catch (err) {
@@ -40,8 +44,17 @@ app.post('/api/auth/register', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
   try {
-    const user = await User.findOne({ email, password });
+    // Look up by email only, then verify password by comparing against passwordHash.
+    const user = await User.findOne({ email });
     if (!user) return res.status(400).json({ error: 'Invalid email or password' });
+
+    const isPasswordValid = await bcrypt.compare(
+      password,
+      user.passwordHash
+    );
+    if (!isPasswordValid) {
+      return res.status(400).json({ error: 'Invalid email or password' });
+    }
 
     res.json({ message: "Login successful", role: user.role });
   } catch (err) {

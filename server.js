@@ -1,9 +1,51 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const mongoose = require('mongoose');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
+
+// Connect to MongoDB
+mongoose.connect('mongodb://localhost:27017/admin')
+  .then(() => console.log('MongoDB connected'))
+  .catch((err) => console.log('MongoDB error:', err));
+
+// User model
+const UserSchema = new mongoose.Schema({
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  role: { type: String, default: "user" }
+});
+const User = mongoose.model('User', UserSchema);
+
+// Middleware
+app.use(express.json());
+
+// Register route
+app.post('/api/auth/register', async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const user = new User({ email, password });
+    await user.save();
+    res.json({ message: 'User created' });
+  } catch (err) {
+    res.status(500).json({ error: 'Email already exists' });
+  }
+});
+
+// Login route
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const user = await User.findOne({ email, password });
+    if (!user) return res.status(400).json({ error: 'Invalid email or password' });
+
+    res.json({ message: "Login successful", role: user.role });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
 const distPath = path.join(__dirname, 'client', 'reactapp', 'dist');
 const indexHtml = path.join(distPath, 'index.html');
@@ -24,15 +66,9 @@ if (!fs.existsSync(indexHtml)) {
 app.use(express.static(distPath));
 
 app.use((req, res, next) => {
-  if (req.method !== 'GET' && req.method !== 'HEAD') {
-    return next();
-  }
-  if (req.path.startsWith('/api')) {
-    return next();
-  }
-  if (path.extname(req.path)) {
-    return next();
-  }
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+  if (req.path.startsWith('/api')) return next();
+  if (path.extname(req.path)) return next();
   res.sendFile(indexHtml);
 });
 

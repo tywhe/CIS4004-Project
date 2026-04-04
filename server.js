@@ -1,8 +1,10 @@
+require('dotenv').config();
+
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
+// const bcrypt = require('bcryptjs');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -11,20 +13,37 @@ app.use(cors());
 
 // Connect to MongoDB
 // Create a database for your app (e.g. "portfolio") and a "users" collection inside it.
-mongoose.connect('mongodb://localhost:27017/portfolio')
+mongoose.connect(process.env.MONGODB_URI, {
+  serverSelectionTimeoutMS: 5000,
+  family: 4
+})
   .then(() => console.log('MongoDB connected'))
   .catch((err) => console.log('MongoDB error:', err));
 
-// User model
+// Models
+const User = require('./models/User');
+const Portfolio = require('./models/Portfolio');
+const Holding = require('./models/Holding');
+const Simulation = require('./models/Simulation');
+const Watchlist = require('./models/Watchlist');
+
+// Middleware
+app.use(express.json());
+
+// Routes
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/portfolios', require('./routes/portfolios'));
+app.use('/api/holdings', require('./routes/holdings'));
+app.use('/api/simulations', require('./routes/simulations'));
+app.use('/api/watchlist', require('./routes/watchlist'));
+
+/* User model
 const UserSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   passwordHash: { type: String, required: true },
   role: { type: String, default: "user" }
 });
 const User = mongoose.model('User', UserSchema);
-
-// Middleware
-app.use(express.json());
 
 // Register route
 app.post('/api/auth/register', async (req, res) => {
@@ -61,6 +80,7 @@ app.post('/api/auth/login', async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
+*/
 
 const distPath = path.join(__dirname, 'client', 'reactapp', 'dist');
 const indexHtml = path.join(distPath, 'index.html');

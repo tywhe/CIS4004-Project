@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
+const Portfolio = require('../models/Portfolio');
 
 // Register
 router.post('/register', async (req, res) => {
@@ -22,9 +23,19 @@ router.post('/login', async (req, res) => {
   try {
     const user = await User.findOne({ username });
     if (!user) return res.status(400).json({ error: 'Invalid username or password' });
+
     const isPasswordValid = await bcrypt.compare(password, user.userPassword);
     if (!isPasswordValid) return res.status(400).json({ error: 'Invalid username or password' });
-    res.json({ message: 'Login successful', role: user.userRole, userId: user._id });
+
+    // Find the user's portfolio
+    const portfolio = await Portfolio.findOne({ userId: user._id });
+
+    res.json({
+      message: 'Login successful',
+      role: user.userRole,
+      userId: user._id,
+      portfolioId: portfolio ? portfolio._id : null
+    });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
   }

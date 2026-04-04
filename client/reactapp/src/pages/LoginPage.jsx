@@ -26,6 +26,8 @@ export default function LoginPage() {
       })
       const data = await response.json()
       if (response.ok) {
+        localStorage.setItem('portfolioId', data.portfolioId)
+        localStorage.setItem('userId', data.userId)
         navigate('/dashboard')
       } else {
         setMessage(data.error || 'Login failed')

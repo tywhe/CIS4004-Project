@@ -2,11 +2,36 @@ const express = require('express');
 const router = express.Router();
 const Holding = require('../models/Holding');
 
-// Get all holdings for a portfolio
+const ALPHA_VANTAGE_KEY = process.env.ALPHA_VANTAGE_KEY;
+
+// Fetch live price from Alpha Vantage
+async function getLivePrice(ticker) {
+  try {
+    const response = await fetch(
+      `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${ticker}&apikey=${ALPHA_VANTAGE_KEY}`
+    );
+    const data = await response.json();
+    const price = data['Global Quote']['05. price'];
+    return price ? parseFloat(price) : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+// Get all holdings for a portfolio (with live prices)
 router.get('/:portfolioId', async (req, res) => {
   try {
     const holdings = await Holding.find({ portfolioId: req.params.portfolioId });
-    res.json(holdings);
+    const updated = await Promise.all(holdings.map(async (h) => {
+      const livePrice = await getLivePrice(h.ticker);
+      if (livePrice) {
+        h.currentPrice = livePrice;
+        h.priceLastUpdated = new Date();
+        await h.save();
+      }
+      return h;
+    }));
+    res.json(updated);
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
   }
@@ -16,10 +41,15 @@ router.get('/:portfolioId', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const holding = new Holding(req.body);
+    const livePrice = await getLivePrice(holding.ticker);
+    if (livePrice) {
+      holding.currentPrice = livePrice;
+      holding.priceLastUpdated = new Date();
+    }
     await holding.save();
     res.json(holding);
   } catch (err) {
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: err.message });
   }
 });
 

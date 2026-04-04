@@ -1,6 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronDown, ChevronUp, LayoutDashboard, Settings } from 'lucide-react'
+import { ChevronDown, ChevronUp, LayoutDashboard, Settings, Plus, Trash2, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import {
@@ -20,7 +20,6 @@ import {
 import {
   Table,
   TableBody,
-  TableCaption,
   TableCell,
   TableHead,
   TableHeader,
@@ -29,6 +28,11 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+
+const API = 'http://localhost:8080'
+
+// Hardcoded for now — replace with real portfolioId from login later
+const PORTFOLIO_ID = localStorage.getItem('portfolioId')
 
 function SortHead({ children, className, accent }) {
   return (
@@ -50,10 +54,77 @@ function SortHead({ children, className, accent }) {
   )
 }
 
+function GainLoss({ value }) {
+  const isPositive = value >= 0
+  return (
+    <span className={isPositive ? 'text-green-500' : 'text-red-500'}>
+      {isPositive ? '+' : ''}${value.toFixed(2)}
+    </span>
+  )
+}
+
 export default function DashboardPage() {
+  const [holdings, setHoldings] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({
+    ticker: '', name: '', assetClass: 'stock', sector: '', quantity: '', purchasePrice: '', notes: ''
+  })
+
   useEffect(() => {
     document.title = 'BloomBoard'
+    fetchHoldings()
   }, [])
+
+  async function fetchHoldings() {
+    setLoading(true)
+    try {
+      const res = await fetch(`${API}/api/holdings/${PORTFOLIO_ID}`)
+      const data = await res.json()
+      setHoldings(data)
+    } catch (err) {
+      console.error('Failed to fetch holdings', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleAdd() {
+    if (!form.ticker || !form.name || !form.quantity || !form.purchasePrice) return
+    setSaving(true)
+    try {
+      const res = await fetch(`${API}/api/holdings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...form,
+          portfolioId: PORTFOLIO_ID,
+          quantity: parseFloat(form.quantity),
+          purchasePrice: parseFloat(form.purchasePrice),
+        })
+      })
+      const newHolding = await res.json()
+      setHoldings([...holdings, newHolding])
+      setForm({ ticker: '', name: '', assetClass: 'stock', sector: '', quantity: '', purchasePrice: '', notes: '' })
+      setShowForm(false)
+    } catch (err) {
+      console.error('Failed to add holding', err)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete(id) {
+    try {
+      await fetch(`${API}/api/holdings/${id}`, { method: 'DELETE' })
+      setHoldings(holdings.filter(h => h._id !== id))
+    } catch (err) {
+      console.error('Failed to delete holding', err)
+    }
+  }
+
+  const totalValue = holdings.reduce((sum, h) => sum + (h.currentPrice || h.purchasePrice) * h.quantity, 0)
 
   return (
     <TooltipProvider>
@@ -97,51 +168,129 @@ export default function DashboardPage() {
           </header>
 
           <div className="mx-auto flex w-full max-w-[1280px] flex-1 flex-col gap-5 p-4 md:p-6">
-            
-
             <Tabs defaultValue="holdings" className="w-full gap-0">
               <TabsList variant="line" className="h-auto w-full min-w-0 justify-start gap-6 border-b border-border bg-transparent p-0">
-                <TabsTrigger value="holdings" className="rounded-none pb-3">
-                  Holdings
-                </TabsTrigger>
-                <TabsTrigger value="portfolios" className="rounded-none pb-3">
-                  Portfolios
-                </TabsTrigger>
-                <TabsTrigger value="watchlist" className="rounded-none pb-3">
-                  Watchlist
-                </TabsTrigger>
-                <TabsTrigger value="simulations" className="rounded-none pb-3">
-                  Simulations
-                </TabsTrigger>
+                <TabsTrigger value="holdings" className="rounded-none pb-3">Holdings</TabsTrigger>
+                <TabsTrigger value="portfolios" className="rounded-none pb-3">Portfolios</TabsTrigger>
+                <TabsTrigger value="watchlist" className="rounded-none pb-3">Watchlist</TabsTrigger>
+                <TabsTrigger value="simulations" className="rounded-none pb-3">Simulations</TabsTrigger>
               </TabsList>
 
               <TabsContent value="holdings" className="mt-6">
+                <div className="flex justify-between items-center mb-4">
+                  <p className="text-sm text-muted-foreground">
+                    Total Value: <span className="font-semibold text-foreground">${totalValue.toFixed(2)}</span>
+                  </p>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" onClick={fetchHoldings} disabled={loading}>
+                      <RefreshCw className={cn("size-4 mr-1", loading && "animate-spin")} /> Refresh
+                    </Button>
+                    <Button size="sm" onClick={() => setShowForm(!showForm)}>
+                      <Plus className="size-4 mr-1" /> Add Holding
+                    </Button>
+                  </div>
+                </div>
+
+                {showForm && (
+                  <Card className="p-4 mb-4 flex flex-wrap gap-3 items-end">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-muted-foreground">Ticker</label>
+                      <input className="border rounded px-2 py-1 text-sm w-24" placeholder="AAPL" value={form.ticker} onChange={e => setForm({ ...form, ticker: e.target.value })} />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-muted-foreground">Name</label>
+                      <input className="border rounded px-2 py-1 text-sm w-32" placeholder="Apple Inc." value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-muted-foreground">Asset Class</label>
+                      <select 
+                        className="border rounded px-2 py-1 text-sm w-28 bg-background text-foreground" 
+                        value={form.assetClass} 
+                        onChange={e => setForm({ ...form, assetClass: e.target.value })}
+                      >
+                        <option value="stock">Stock</option>
+                        <option value="ETF">ETF</option>
+                        <option value="crypto">Crypto</option>
+                        <option value="bond">Bond</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-muted-foreground">Sector</label>
+                      <input className="border rounded px-2 py-1 text-sm w-28" placeholder="Technology" value={form.sector} onChange={e => setForm({ ...form, sector: e.target.value })} />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-muted-foreground">Quantity</label>
+                      <input className="border rounded px-2 py-1 text-sm w-20" placeholder="10" type="number" value={form.quantity} onChange={e => setForm({ ...form, quantity: e.target.value })} />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-muted-foreground">Purchase Price ($)</label>
+                      <input className="border rounded px-2 py-1 text-sm w-24" placeholder="150.00" type="number" value={form.purchasePrice} onChange={e => setForm({ ...form, purchasePrice: e.target.value })} />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-muted-foreground">Notes</label>
+                      <input className="border rounded px-2 py-1 text-sm w-32" placeholder="Optional" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
+                    </div>
+                    <Button size="sm" onClick={handleAdd} disabled={saving}>
+                      {saving ? 'Saving...' : 'Save'}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setShowForm(false)}>Cancel</Button>
+                  </Card>
+                )}
+
                 <Card className="gap-0 overflow-hidden py-0">
                   <Table>
-                    <TableCaption>Positions table — columns match your portfolio view.</TableCaption>
                     <TableHeader>
                       <TableRow className="hover:bg-transparent">
                         <SortHead>Symbol</SortHead>
-                        <SortHead className="text-right">Last price</SortHead>
-                        <SortHead className="text-right">Today&apos;s gain/loss</SortHead>
-                        <SortHead className="text-right">Total gain/loss</SortHead>
-                        <SortHead className="text-right">Current value</SortHead>
-                        <SortHead className="text-right">Cost basis</SortHead>
+                        <SortHead>Name</SortHead>
+                        <SortHead className="text-right">Last Price</SortHead>
+                        <SortHead className="text-right">Total Gain/Loss</SortHead>
+                        <SortHead className="text-right">Current Value</SortHead>
+                        <SortHead className="text-right">Purchase Price</SortHead>
                         <SortHead className="text-right">Quantity</SortHead>
-                        <SortHead className="text-right" accent>
-                          % of account
-                        </SortHead>
+                        <SortHead className="text-right" accent>% of Account</SortHead>
+                        <TableHead />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      <TableRow className="hover:bg-transparent">
-                        <TableCell
-                          colSpan={8}
-                          className="py-10 text-center text-sm italic text-muted-foreground"
-                        >
-                          No holdings yet — rows will be rendered from the database.
-                        </TableCell>
-                      </TableRow>
+                      {loading ? (
+                        <TableRow className="hover:bg-transparent">
+                          <TableCell colSpan={9} className="py-10 text-center text-sm text-muted-foreground">
+                            Loading holdings...
+                          </TableCell>
+                        </TableRow>
+                      ) : holdings.length === 0 ? (
+                        <TableRow className="hover:bg-transparent">
+                          <TableCell colSpan={9} className="py-10 text-center text-sm italic text-muted-foreground">
+                            No holdings yet — click Add Holding to get started.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        holdings.map(h => {
+                          const price = h.currentPrice || h.purchasePrice
+                          const currentValue = price * h.quantity
+                          const totalGainLoss = (price - h.purchasePrice) * h.quantity
+                          const percentOfAccount = totalValue > 0 ? (currentValue / totalValue) * 100 : 0
+                          return (
+                            <TableRow key={h._id}>
+                              <TableCell className="font-semibold">{h.ticker}</TableCell>
+                              <TableCell className="text-muted-foreground">{h.name}</TableCell>
+                              <TableCell className="text-right">${price.toFixed(2)}</TableCell>
+                              <TableCell className="text-right"><GainLoss value={totalGainLoss} /></TableCell>
+                              <TableCell className="text-right">${currentValue.toFixed(2)}</TableCell>
+                              <TableCell className="text-right">${h.purchasePrice.toFixed(2)}</TableCell>
+                              <TableCell className="text-right">{h.quantity}</TableCell>
+                              <TableCell className="text-right">{percentOfAccount.toFixed(1)}%</TableCell>
+                              <TableCell className="text-right">
+                                <Button size="icon" variant="ghost" onClick={() => handleDelete(h._id)}>
+                                  <Trash2 className="size-4 text-red-500" />
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })
+                      )}
                     </TableBody>
                   </Table>
                 </Card>

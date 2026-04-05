@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronDown, ChevronUp, Plus, Trash2, RefreshCw, Pencil } from 'lucide-react'
 import DashboardShell from '@/components/DashboardShell.jsx'
+import { HoldingsCompositionCard } from '@/components/HoldingsCompositionCard.jsx'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import {
@@ -345,6 +346,18 @@ export default function DashboardPage() {
                     <Button size="sm" variant="ghost" onClick={() => setShowForm(false)}>Cancel</Button>
                   </Card>
                 )}
+
+                <HoldingsCompositionCard
+                  holdings={filteredHoldings}
+                  totalValue={totalValue}
+                  loading={loading}
+                  subtitle={
+                    selectedPortfolioId
+                      ? portfolios.find((p) => p._id === selectedPortfolioId)?.portfolioName ??
+                        'Selected portfolio'
+                      : 'All portfolios'
+                  }
+                />
 
                 <Card className="gap-0 overflow-hidden py-0">
                   <Table>

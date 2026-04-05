@@ -18,6 +18,15 @@ import { API_BASE } from '@/lib/api.js'
 import { hasSession, isAdminSession } from '@/lib/session.js'
 import { cn } from '@/lib/utils'
 
+/** Normalize Mongo-style _id from JSON (string or { $oid }) for URLs and comparisons. */
+function mongoIdString(value) {
+  if (value == null || value === '') return ''
+  if (typeof value === 'object' && value !== null && '$oid' in value) {
+    return String(value.$oid)
+  }
+  return String(value)
+}
+
 function SortHead({ children, className, accent }) {
   return (
     <TableHead
@@ -73,6 +82,7 @@ export default function DashboardPage() {
   const [editForm, setEditForm] = useState({ portfolioName: '', portfolioType: 'investment' })
   const [selectedPortfolioId, setSelectedPortfolioId] = useState(null)
   const [holdingsError, setHoldingsError] = useState('')
+  const [portfolioError, setPortfolioError] = useState('')
 
   const USER_ID = localStorage.getItem('userId')
 
@@ -118,7 +128,7 @@ export default function DashboardPage() {
     const portfolioId =
       selectedPortfolioId ||
       PORTFOLIO_ID ||
-      (portfolios.length === 1 ? portfolios[0]._id : null)
+      (portfolios.length === 1 ? mongoIdString(portfolios[0]._id) : null)
     if (!portfolioId) {
       setHoldingsError(
         'No portfolio to save into. Create one under Portfolios first. If you have more than one, use “Show holdings for” to pick which portfolio to add to.',
@@ -172,7 +182,9 @@ export default function DashboardPage() {
   }
 
   const filteredHoldings = selectedPortfolioId
-    ? holdings.filter(h => h.portfolioId === selectedPortfolioId)
+    ? holdings.filter(
+        (h) => mongoIdString(h.portfolioId) === mongoIdString(selectedPortfolioId),
+      )
     : holdings
 
   const totalValue = filteredHoldings.reduce((sum, h) => {
@@ -201,46 +213,95 @@ export default function DashboardPage() {
   }
 
   async function handleAddPortfolio() {
-    if (!portfolioForm.portfolioName) return
+    if (!portfolioForm.portfolioName?.trim()) return
+    setPortfolioError('')
     setSavingPortfolio(true)
     try {
       const res = await fetch(`${API_BASE}/api/portfolios`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...portfolioForm, userId: USER_ID })
+        body: JSON.stringify({ ...portfolioForm, portfolioName: portfolioForm.portfolioName.trim(), userId: USER_ID })
       })
-      const newPortfolio = await res.json()
-      setPortfolios([...portfolios, newPortfolio])
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setPortfolioError(typeof data.error === 'string' ? data.error : `Could not create portfolio (${res.status})`)
+        return
+      }
+      if (!data._id) {
+        setPortfolioError('Unexpected response from server.')
+        return
+      }
+      setPortfolios((prev) => [...prev, data])
       setPortfolioForm({ portfolioName: '', portfolioType: 'investment' })
       setShowPortfolioForm(false)
     } catch (err) {
       console.error('Failed to add portfolio', err)
+      setPortfolioError('Could not reach the server.')
     } finally {
       setSavingPortfolio(false)
     }
   }
 
   async function handleDeletePortfolio(id) {
+    const idStr = mongoIdString(id)
+    if (!idStr) return
+    setPortfolioError('')
     try {
-      await fetch(`${API_BASE}/api/portfolios/${id}`, { method: 'DELETE' })
-      setPortfolios(portfolios.filter(p => p._id !== id))
+      const res = await fetch(`${API_BASE}/api/portfolios/${encodeURIComponent(idStr)}`, { method: 'DELETE' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setPortfolioError(typeof data.error === 'string' ? data.error : `Could not delete (${res.status})`)
+        return
+      }
+      setPortfolios((prev) => prev.filter((p) => mongoIdString(p._id) !== idStr))
+      if (mongoIdString(selectedPortfolioId) === idStr) {
+        setSelectedPortfolioId(null)
+      }
+      if (mongoIdString(editingPortfolio) === idStr) {
+        setEditingPortfolio(null)
+      }
+      const storedPid = localStorage.getItem('portfolioId')
+      if (storedPid && mongoIdString(storedPid) === idStr) {
+        localStorage.removeItem('portfolioId')
+      }
     } catch (err) {
       console.error('Failed to delete portfolio', err)
+      setPortfolioError('Could not reach the server.')
     }
   }
 
   async function handleEditPortfolio(id) {
+    const idStr = mongoIdString(id)
+    if (!idStr || !editForm.portfolioName?.trim()) {
+      setPortfolioError('Portfolio name is required.')
+      return
+    }
+    setPortfolioError('')
     try {
-      const res = await fetch(`${API_BASE}/api/portfolios/${id}`, {
+      const res = await fetch(`${API_BASE}/api/portfolios/${encodeURIComponent(idStr)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editForm)
+        body: JSON.stringify({
+          portfolioName: editForm.portfolioName.trim(),
+          portfolioType: editForm.portfolioType,
+        }),
       })
-      const updated = await res.json()
-      setPortfolios(portfolios.map(p => p._id === id ? updated : p))
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setPortfolioError(typeof data.error === 'string' ? data.error : `Could not save (${res.status})`)
+        return
+      }
+      if (!data._id) {
+        setPortfolioError('Unexpected response from server.')
+        return
+      }
+      setPortfolios((prev) =>
+        prev.map((p) => (mongoIdString(p._id) === idStr ? data : p)),
+      )
       setEditingPortfolio(null)
     } catch (err) {
       console.error('Failed to update portfolio', err)
+      setPortfolioError('Could not reach the server.')
     }
   }
 
@@ -286,7 +347,8 @@ export default function DashboardPage() {
                 {selectedPortfolioId && (
                   <p className="text-xs text-muted-foreground">
                     Showing holdings for: <span className="font-semibold text-foreground">
-                      {portfolios.find(p => p._id === selectedPortfolioId)?.portfolioName}
+                      {portfolios.find((p) => mongoIdString(p._id) === mongoIdString(selectedPortfolioId))
+                        ?.portfolioName}
                     </span>
                     <button className="ml-2 underline" onClick={() => setSelectedPortfolioId(null)}>
                       Show all
@@ -353,8 +415,9 @@ export default function DashboardPage() {
                   loading={loading}
                   subtitle={
                     selectedPortfolioId
-                      ? portfolios.find((p) => p._id === selectedPortfolioId)?.portfolioName ??
-                        'Selected portfolio'
+                      ? portfolios.find(
+                          (p) => mongoIdString(p._id) === mongoIdString(selectedPortfolioId),
+                        )?.portfolioName ?? 'Selected portfolio'
                       : 'All portfolios'
                   }
                 />
@@ -447,10 +510,23 @@ export default function DashboardPage() {
                   <p className="text-sm text-muted-foreground">
                     {portfolios.length} portfolio{portfolios.length !== 1 ? 's' : ''}
                   </p>
-                  <Button size="sm" onClick={() => setShowPortfolioForm(!showPortfolioForm)}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      setPortfolioError('')
+                      setShowPortfolioForm(!showPortfolioForm)
+                    }}
+                  >
                     <Plus className="size-4 mr-1" /> New Portfolio
                   </Button>
                 </div>
+
+                {portfolioError ? (
+                  <p className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    {portfolioError}
+                  </p>
+                ) : null}
 
                 {showPortfolioForm && (
                   <Card className="p-4 mb-4 flex flex-wrap gap-3 items-end">
@@ -476,10 +552,20 @@ export default function DashboardPage() {
                         <option value="retirement">Retirement</option>
                       </select>
                     </div>
-                    <Button size="sm" onClick={handleAddPortfolio} disabled={savingPortfolio}>
+                    <Button type="button" size="sm" onClick={handleAddPortfolio} disabled={savingPortfolio}>
                       {savingPortfolio ? 'Saving...' : 'Save'}
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setShowPortfolioForm(false)}>Cancel</Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setPortfolioError('')
+                        setShowPortfolioForm(false)
+                      }}
+                    >
+                      Cancel
+                    </Button>
                   </Card>
                 )}
 
@@ -491,29 +577,31 @@ export default function DashboardPage() {
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {portfolios.map(p => (
+                    {portfolios.map((p) => {
+                      const pId = mongoIdString(p._id)
+                      return (
                       <Card
-                        key={p._id}
-                        className="p-4 flex flex-col gap-3 cursor-pointer hover:border-primary transition-colors"
+                        key={pId || p.portfolioName}
+                        className="flex cursor-pointer flex-col gap-3 p-4 transition-colors hover:border-primary"
                         onClick={() => {
-                          if (editingPortfolio === p._id) return
-                            setSelectedPortfolioId(p._id)
-                            setActiveTab('holdings')
+                          if (mongoIdString(editingPortfolio) === pId) return
+                          setSelectedPortfolioId(pId)
+                          setActiveTab('holdings')
                         }}
                       >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          {editingPortfolio === p._id ? (
-                            <div className="flex flex-col gap-2">
+                          {mongoIdString(editingPortfolio) === pId ? (
+                            <div className="flex flex-col gap-2" onClick={(e) => e.stopPropagation()}>
                               <input
-                                className="border rounded px-2 py-1 text-sm w-full bg-background"
+                                className="w-full rounded border bg-background px-2 py-1 text-sm"
                                 value={editForm.portfolioName}
-                                onChange={e => setEditForm({ ...editForm, portfolioName: e.target.value })}
+                                onChange={(e) => setEditForm({ ...editForm, portfolioName: e.target.value })}
                               />
                               <select
-                                className="border rounded px-2 py-1 text-sm w-full bg-background text-foreground"
+                                className="w-full rounded border bg-background px-2 py-1 text-sm text-foreground"
                                 value={editForm.portfolioType}
-                                onChange={e => setEditForm({ ...editForm, portfolioType: e.target.value })}
+                                onChange={(e) => setEditForm({ ...editForm, portfolioType: e.target.value })}
                               >
                                 <option value="investment">Investment</option>
                                 <option value="theoretical">Theoretical</option>
@@ -521,35 +609,58 @@ export default function DashboardPage() {
                                 <option value="retirement">Retirement</option>
                               </select>
                               <div className="flex gap-2">
-                                <Button size="sm" onClick={(e) => { e.stopPropagation(); handleEditPortfolio(p._id) }}>Save</Button>
-                                <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setEditingPortfolio(null) }}>Cancel</Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleEditPortfolio(pId)
+                                  }}
+                                >
+                                  Save
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setPortfolioError('')
+                                    setEditingPortfolio(null)
+                                  }}
+                                >
+                                  Cancel
+                                </Button>
                               </div>
                             </div>
                           ) : (
                             <>
                               <h3 className="font-semibold text-foreground">{p.portfolioName}</h3>
-                              <span className="text-xs text-muted-foreground capitalize">{p.portfolioType}</span>
+                              <span className="text-xs capitalize text-muted-foreground">{p.portfolioType}</span>
                             </>
                           )}
                         </div>
-                        <div className="flex">
+                        <div className="flex shrink-0">
                           <Button
+                            type="button"
                             size="icon"
                             variant="ghost"
                             onClick={(e) => {
                               e.stopPropagation()
-                              setEditingPortfolio(p._id)
+                              setPortfolioError('')
+                              setEditingPortfolio(pId)
                               setEditForm({ portfolioName: p.portfolioName, portfolioType: p.portfolioType })
                             }}
                           >
                             <Pencil className="size-4" />
                           </Button>
                           <Button
+                            type="button"
                             size="icon"
                             variant="ghost"
                             onClick={(e) => {
                               e.stopPropagation()
-                              handleDeletePortfolio(p._id)
+                              handleDeletePortfolio(pId)
                             }}
                           >
                             <Trash2 className="size-4 text-red-500" />
@@ -560,7 +671,8 @@ export default function DashboardPage() {
                           Created {new Date(p.createdAt).toLocaleDateString()}
                         </div>
                       </Card>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </TabsContent>

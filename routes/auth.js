@@ -114,7 +114,7 @@ router.put('/:id', async (req, res) => {
       if (!existing) return res.status(404).json({ error: 'User not found' });
       return res.json(existing);
     }
-    const user = await User.findByIdAndUpdate(req.params.id, { $set: updates }, { new: true }).select(
+    const user = await User.findByIdAndUpdate(req.params.id, { $set: updates }, { returnDocument: 'after' }).select(
       '-userPassword',
     );
     if (!user) return res.status(404).json({ error: 'User not found' });

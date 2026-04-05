@@ -69,7 +69,7 @@ router.post('/', async (req, res) => {
 // Update a holding
 router.put('/:id', async (req, res) => {
   try {
-    const holding = await Holding.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const holding = await Holding.findByIdAndUpdate(req.params.id, req.body, { returnDocument: 'after' });
     res.json(holding);
   } catch (err) {
     res.status(500).json({ error: 'Server error' });

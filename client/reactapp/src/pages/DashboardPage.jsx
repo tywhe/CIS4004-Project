@@ -197,7 +197,7 @@ const totalValue = filteredHoldings.reduce((sum, h) => sum + (h.currentPrice || 
       <div className="mx-auto flex w-full max-w-[1280px] flex-1 flex-col gap-5 p-4 md:p-6">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full gap-0">
               <TabsList variant="line" className="h-auto w-full min-w-0 justify-start gap-6 border-b border-border bg-transparent p-0">
-                <TabsTrigger value="holdings" className="rounded-none pb-3">Holdings</TabsTrigger>
+                <TabsTrigger value="holdings" className="rounded-none pb-3">Positions</TabsTrigger>
                 <TabsTrigger value="portfolios" className="rounded-none pb-3">Portfolios</TabsTrigger>
                 <TabsTrigger value="watchlist" className="rounded-none pb-3">Watchlist</TabsTrigger>
                 <TabsTrigger value="simulations" className="rounded-none pb-3">Simulations</TabsTrigger>

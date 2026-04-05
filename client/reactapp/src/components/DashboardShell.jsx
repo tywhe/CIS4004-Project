@@ -41,9 +41,11 @@ export default function DashboardShell({ children }) {
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
-                    <SidebarMenuButton tooltip="Settings">
-                      <Settings />
-                      <span>Settings</span>
+                    <SidebarMenuButton asChild isActive={pathname === '/settings'} tooltip="Settings">
+                      <NavLink to="/settings">
+                        <Settings />
+                        <span>Settings</span>
+                      </NavLink>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 </SidebarMenu>

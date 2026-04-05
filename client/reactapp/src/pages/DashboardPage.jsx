@@ -38,10 +38,14 @@ function SortHead({ children, className, accent }) {
 }
 
 function GainLoss({ value }) {
-  const isPositive = value >= 0
+  const n = Number(value)
+  if (!Number.isFinite(n)) {
+    return <span className="text-muted-foreground">—</span>
+  }
+  const isPositive = n >= 0
   return (
     <span className={isPositive ? 'text-green-500' : 'text-red-500'}>
-      {isPositive ? '+' : ''}${value.toFixed(2)}
+      {isPositive ? '+' : ''}${n.toFixed(2)}
     </span>
   )
 }
@@ -66,7 +70,8 @@ export default function DashboardPage() {
   const [savingPortfolio, setSavingPortfolio] = useState(false)
   const [editingPortfolio, setEditingPortfolio] = useState(null)
   const [editForm, setEditForm] = useState({ portfolioName: '', portfolioType: 'investment' })
-  const [selectedPortfolioId, setSelectedPortfolioId] = useState(null)  
+  const [selectedPortfolioId, setSelectedPortfolioId] = useState(null)
+  const [holdingsError, setHoldingsError] = useState('')
 
   const USER_ID = localStorage.getItem('userId')
 
@@ -109,43 +114,72 @@ export default function DashboardPage() {
 
   async function handleAdd() {
     if (!form.ticker || !form.name || !form.quantity || !form.purchasePrice) return
+    const portfolioId =
+      selectedPortfolioId ||
+      PORTFOLIO_ID ||
+      (portfolios.length === 1 ? portfolios[0]._id : null)
+    if (!portfolioId) {
+      setHoldingsError(
+        'No portfolio to save into. Create one under Portfolios first. If you have more than one, use “Show holdings for” to pick which portfolio to add to.',
+      )
+      return
+    }
+    setHoldingsError('')
     setSaving(true)
     try {
       const res = await fetch(`${API_BASE}/api/holdings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...form,
-          portfolioId: selectedPortfolioId || PORTFOLIO_ID,
+          ticker: form.ticker.trim(),
+          name: form.name.trim(),
+          assetClass: form.assetClass,
+          sector: form.sector?.trim() ?? '',
+          notes: form.notes?.trim() ?? '',
+          portfolioId,
           quantity: parseFloat(form.quantity),
           purchasePrice: parseFloat(form.purchasePrice),
-        })
+        }),
       })
-      const newHolding = await res.json()
-      setHoldings([...holdings, newHolding])
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setHoldingsError(typeof data.error === 'string' ? data.error : `Could not save holding (${res.status})`)
+        return
+      }
+      if (!data._id || data.error) {
+        setHoldingsError('Unexpected response from server.')
+        return
+      }
+      setHoldings((prev) => [...prev, data])
       setForm({ ticker: '', name: '', assetClass: 'stock', sector: '', quantity: '', purchasePrice: '', notes: '' })
       setShowForm(false)
     } catch (err) {
       console.error('Failed to add holding', err)
+      setHoldingsError('Could not reach the server.')
     } finally {
       setSaving(false)
     }
   }
 
-async function handleDelete(id) {
-  try {
-    await fetch(`${API_BASE}/api/holdings/${id}`, { method: 'DELETE' })
-    setHoldings(holdings.filter(h => h._id !== id))
-  } catch (err) {
-    console.error('Failed to delete holding', err)
+  async function handleDelete(id) {
+    try {
+      await fetch(`${API_BASE}/api/holdings/${id}`, { method: 'DELETE' })
+      setHoldings(holdings.filter(h => h._id !== id))
+    } catch (err) {
+      console.error('Failed to delete holding', err)
+    }
   }
-}
 
-const filteredHoldings = selectedPortfolioId
-  ? holdings.filter(h => h.portfolioId === selectedPortfolioId)
-  : holdings
+  const filteredHoldings = selectedPortfolioId
+    ? holdings.filter(h => h.portfolioId === selectedPortfolioId)
+    : holdings
 
-const totalValue = filteredHoldings.reduce((sum, h) => sum + (h.currentPrice || h.purchasePrice) * h.quantity, 0)
+  const totalValue = filteredHoldings.reduce((sum, h) => {
+    const p = Number(h.currentPrice ?? h.purchasePrice)
+    const q = Number(h.quantity)
+    if (!Number.isFinite(p) || !Number.isFinite(q)) return sum
+    return sum + p * q
+  }, 0)
 
   async function fetchPortfolios() {
     if (!USER_ID) {
@@ -237,7 +271,13 @@ const totalValue = filteredHoldings.reduce((sum, h) => sum + (h.currentPrice || 
                     <Button size="sm" variant="outline" onClick={fetchHoldings} disabled={loading}>
                       <RefreshCw className={cn("size-4 mr-1", loading && "animate-spin")} /> Refresh
                     </Button>
-                    <Button size="sm" onClick={() => setShowForm(!showForm)}>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setHoldingsError('')
+                        setShowForm(!showForm)
+                      }}
+                    >
                       <Plus className="size-4 mr-1" /> Add Holding
                     </Button>
                   </div>
@@ -252,6 +292,12 @@ const totalValue = filteredHoldings.reduce((sum, h) => sum + (h.currentPrice || 
                     </button>
                   </p>
                 )}
+
+                {holdingsError ? (
+                  <p className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    {holdingsError}
+                  </p>
+                ) : null}
 
                 {showForm && (
                   <Card className="p-4 mb-4 flex flex-wrap gap-3 items-end">
@@ -329,20 +375,39 @@ const totalValue = filteredHoldings.reduce((sum, h) => sum + (h.currentPrice || 
                           </TableCell>
                         </TableRow>
                       ) : (
-                        filteredHoldings.map(h => {
-                          const price = h.currentPrice || h.purchasePrice
-                          const currentValue = price * h.quantity
-                          const totalGainLoss = (price - h.purchasePrice) * h.quantity
-                          const percentOfAccount = totalValue > 0 ? (currentValue / totalValue) * 100 : 0
+                        filteredHoldings.map((h) => {
+                          const qty = Number(h.quantity)
+                          const purchase = Number(h.purchasePrice)
+                          const last = Number(h.currentPrice ?? h.purchasePrice)
+                          const price = Number.isFinite(last) ? last : purchase
+                          const currentValue =
+                            Number.isFinite(price) && Number.isFinite(qty) ? price * qty : NaN
+                          const totalGainLoss =
+                            Number.isFinite(price) && Number.isFinite(purchase) && Number.isFinite(qty)
+                              ? (price - purchase) * qty
+                              : NaN
+                          const percentOfAccount = totalValue > 0 && Number.isFinite(currentValue)
+                            ? (currentValue / totalValue) * 100
+                            : 0
                           return (
-                            <TableRow key={h._id}>
+                            <TableRow key={h._id ?? h.ticker}>
                               <TableCell className="font-semibold">{h.ticker}</TableCell>
                               <TableCell className="text-muted-foreground">{h.name}</TableCell>
-                              <TableCell className="text-right">${price.toFixed(2)}</TableCell>
-                              <TableCell className="text-right"><GainLoss value={totalGainLoss} /></TableCell>
-                              <TableCell className="text-right">${currentValue.toFixed(2)}</TableCell>
-                              <TableCell className="text-right">${h.purchasePrice.toFixed(2)}</TableCell>
-                              <TableCell className="text-right">{h.quantity}</TableCell>
+                              <TableCell className="text-right">
+                                {Number.isFinite(price) ? `$${price.toFixed(2)}` : '—'}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <GainLoss value={totalGainLoss} />
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {Number.isFinite(currentValue) ? `$${currentValue.toFixed(2)}` : '—'}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {Number.isFinite(purchase) ? `$${purchase.toFixed(2)}` : '—'}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {Number.isFinite(qty) ? qty : '—'}
+                              </TableCell>
                               <TableCell className="text-right">{percentOfAccount.toFixed(1)}%</TableCell>
                               <TableCell className="text-right">
                                 <Button

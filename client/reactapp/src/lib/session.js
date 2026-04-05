@@ -15,7 +15,7 @@ export function getSessionRole() {
 }
 
 export function isAdminSession() {
-  return getSessionRole() === 'admin'
+  return String(getSessionRole() || '').trim().toLowerCase() === 'admin'
 }
 
 export function hasSession() {

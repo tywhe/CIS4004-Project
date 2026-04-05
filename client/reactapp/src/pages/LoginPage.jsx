@@ -51,8 +51,10 @@ export default function LoginPage() {
           localStorage.setItem('portfolioId', data.portfolioId)
         }
         localStorage.setItem('userId', data.userId)
-        localStorage.setItem('role', data.role ?? 'user')
-        navigate('/dashboard')
+        const roleNorm =
+          String(data.role ?? 'user').trim().toLowerCase() === 'admin' ? 'admin' : 'user'
+        localStorage.setItem('role', roleNorm)
+        navigate(roleNorm === 'admin' ? '/admin' : '/dashboard')
       } else {
         setMessage(data.error || 'Login failed')
       }

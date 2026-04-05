@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { ChevronDown, ChevronUp, Plus, Trash2, RefreshCw, Pencil } from 'lucide-react'
 import DashboardShell from '@/components/DashboardShell.jsx'
 import { Button } from '@/components/ui/button'
@@ -13,6 +14,7 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { API_BASE } from '@/lib/api.js'
+import { hasSession, isAdminSession } from '@/lib/session.js'
 import { cn } from '@/lib/utils'
 
 function SortHead({ children, className, accent }) {
@@ -45,6 +47,8 @@ function GainLoss({ value }) {
 }
 
 export default function DashboardPage() {
+  const navigate = useNavigate()
+  const [gate, setGate] = useState('pending')
   const [activeTab, setActiveTab] = useState('holdings')
   const PORTFOLIO_ID = localStorage.getItem('portfolioId')
   const [holdings, setHoldings] = useState([])
@@ -67,10 +71,23 @@ export default function DashboardPage() {
   const USER_ID = localStorage.getItem('userId')
 
   useEffect(() => {
+    if (!hasSession()) {
+      navigate('/', { replace: true })
+      return
+    }
+    if (isAdminSession()) {
+      navigate('/admin', { replace: true })
+      return
+    }
+    setGate('ok')
+  }, [navigate])
+
+  useEffect(() => {
+    if (gate !== 'ok') return
     document.title = 'BloomBoard'
     fetchHoldings()
     fetchPortfolios()
-  }, [])
+  }, [gate])
 
   async function fetchHoldings() {
     if (!USER_ID) {
@@ -190,6 +207,14 @@ const totalValue = filteredHoldings.reduce((sum, h) => sum + (h.currentPrice || 
     } catch (err) {
       console.error('Failed to update portfolio', err)
     }
+  }
+
+  if (gate !== 'ok') {
+    return (
+      <div className="flex min-h-svh items-center justify-center bg-background text-sm text-muted-foreground">
+        Loading…
+      </div>
+    )
   }
 
   return (

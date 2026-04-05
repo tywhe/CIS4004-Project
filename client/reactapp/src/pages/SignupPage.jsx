@@ -13,51 +13,42 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { API_BASE } from '@/lib/api.js'
 
-function readPostSignupBanner() {
-  try {
-    if (sessionStorage.getItem('postSignup') === '1') {
-      sessionStorage.removeItem('postSignup')
-      return 'Account created. You can sign in now.'
-    }
-  } catch {
-    /* ignore */
-  }
-  return ''
-}
-
-export default function LoginPage() {
+export default function SignupPage() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [message, setMessage] = useState('')
-  const [banner] = useState(readPostSignupBanner)
+  const [submitting, setSubmitting] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
-    document.title = 'Login'
+    document.title = 'Sign up'
   }, [])
 
   async function handleSubmit(e) {
     e.preventDefault()
     setMessage('')
+    setSubmitting(true)
     try {
-      const response = await fetch(`${API_BASE}/api/auth/login`, {
+      const response = await fetch(`${API_BASE}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username: username.trim(), password }),
       })
       const data = await response.json()
       if (response.ok) {
-        if (data.portfolioId != null) {
-          localStorage.setItem('portfolioId', data.portfolioId)
+        try {
+          sessionStorage.setItem('postSignup', '1')
+        } catch {
+          /* ignore */
         }
-        localStorage.setItem('userId', data.userId)
-        localStorage.setItem('role', data.role ?? 'user')
-        navigate('/dashboard')
-      } else {
-        setMessage(data.error || 'Login failed')
+        navigate('/', { replace: true })
+        return
       }
+      setMessage(data.error || 'Could not create account')
     } catch {
       setMessage('Could not connect to server')
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -65,40 +56,36 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center p-6">
       <Card className="w-full max-w-md shadow-md">
         <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-2xl font-semibold tracking-tight">Sign in</CardTitle>
+          <CardTitle className="text-2xl font-semibold tracking-tight">Create an account</CardTitle>
           <CardDescription>
-            Sign in to BloomBoard with your username and password.
+            Choose a username and password. You will use these to sign in to BloomBoard.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {banner ? (
-            <p className="mb-4 rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-sm text-foreground">
-              {banner}
-            </p>
-          ) : null}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
+              <Label htmlFor="signup-username">Username</Label>
               <Input
-                id="username"
+                id="signup-username"
                 name="username"
                 type="text"
                 autoComplete="username"
                 required
-                placeholder="username"
+                placeholder="yourname"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="signup-password">Password</Label>
               <Input
-                id="password"
+                id="signup-password"
                 name="password"
                 type="password"
-                autoComplete="current-password"
+                autoComplete="new-password"
                 required
-                placeholder="********"
+                minLength={4}
+                placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
@@ -108,19 +95,19 @@ export default function LoginPage() {
                 {message}
               </p>
             ) : null}
-            <Button type="submit" className="w-full" size="lg">
-              Sign in
+            <Button type="submit" className="w-full" size="lg" disabled={submitting}>
+              {submitting ? 'Creating account…' : 'Create account'}
             </Button>
           </form>
         </CardContent>
         <CardFooter className="flex justify-center border-t border-border/80 bg-transparent py-4 text-sm text-muted-foreground">
           <span>
-            Don&apos;t have an account?{' '}
+            Already have an account?{' '}
             <Link
-              to="/signup"
+              to="/"
               className="font-medium text-foreground underline-offset-4 hover:underline"
             >
-              Sign up
+              Login
             </Link>
           </span>
         </CardFooter>

@@ -1,22 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { ChevronDown, ChevronUp, LayoutDashboard, Settings, Plus, Trash2, RefreshCw, Pencil } from 'lucide-react'
+import { ChevronDown, ChevronUp, Plus, Trash2, RefreshCw, Pencil } from 'lucide-react'
+import DashboardShell from '@/components/DashboardShell.jsx'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarInset,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarProvider,
-  SidebarRail,
-  SidebarTrigger,
-} from '@/components/ui/sidebar'
 import {
   Table,
   TableBody,
@@ -26,10 +12,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { TooltipProvider } from '@/components/ui/tooltip'
+import { API_BASE } from '@/lib/api.js'
 import { cn } from '@/lib/utils'
-
-const API = 'http://localhost:8080'
 
 function SortHead({ children, className, accent }) {
   return (
@@ -62,7 +46,7 @@ function GainLoss({ value }) {
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState('holdings')
-  const [PORTFOLIO_ID, setPortfolioId] = useState(localStorage.getItem('portfolioId'))
+  const PORTFOLIO_ID = localStorage.getItem('portfolioId')
   const [holdings, setHoldings] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -89,9 +73,14 @@ export default function DashboardPage() {
   }, [])
 
   async function fetchHoldings() {
+    if (!USER_ID) {
+      setHoldings([])
+      setLoading(false)
+      return
+    }
     setLoading(true)
     try {
-      const res = await fetch(`${API}/api/holdings/user/${USER_ID}`)
+      const res = await fetch(`${API_BASE}/api/holdings/user/${USER_ID}`)
       const data = await res.json()
       setHoldings(data)
     } catch (err) {
@@ -105,7 +94,7 @@ export default function DashboardPage() {
     if (!form.ticker || !form.name || !form.quantity || !form.purchasePrice) return
     setSaving(true)
     try {
-      const res = await fetch(`${API}/api/holdings`, {
+      const res = await fetch(`${API_BASE}/api/holdings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -128,7 +117,7 @@ export default function DashboardPage() {
 
 async function handleDelete(id) {
   try {
-    await fetch(`${API}/api/holdings/${id}`, { method: 'DELETE' })
+    await fetch(`${API_BASE}/api/holdings/${id}`, { method: 'DELETE' })
     setHoldings(holdings.filter(h => h._id !== id))
   } catch (err) {
     console.error('Failed to delete holding', err)
@@ -142,9 +131,14 @@ const filteredHoldings = selectedPortfolioId
 const totalValue = filteredHoldings.reduce((sum, h) => sum + (h.currentPrice || h.purchasePrice) * h.quantity, 0)
 
   async function fetchPortfolios() {
+    if (!USER_ID) {
+      setPortfolios([])
+      setPortfoliosLoading(false)
+      return
+    }
     setPortfoliosLoading(true)
     try {
-      const res = await fetch(`${API}/api/portfolios/${USER_ID}`)
+      const res = await fetch(`${API_BASE}/api/portfolios/${USER_ID}`)
       const data = await res.json()
       setPortfolios(data)
     } catch (err) {
@@ -158,7 +152,7 @@ const totalValue = filteredHoldings.reduce((sum, h) => sum + (h.currentPrice || 
     if (!portfolioForm.portfolioName) return
     setSavingPortfolio(true)
     try {
-      const res = await fetch(`${API}/api/portfolios`, {
+      const res = await fetch(`${API_BASE}/api/portfolios`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...portfolioForm, userId: USER_ID })
@@ -176,7 +170,7 @@ const totalValue = filteredHoldings.reduce((sum, h) => sum + (h.currentPrice || 
 
   async function handleDeletePortfolio(id) {
     try {
-      await fetch(`${API}/api/portfolios/${id}`, { method: 'DELETE' })
+      await fetch(`${API_BASE}/api/portfolios/${id}`, { method: 'DELETE' })
       setPortfolios(portfolios.filter(p => p._id !== id))
     } catch (err) {
       console.error('Failed to delete portfolio', err)
@@ -185,7 +179,7 @@ const totalValue = filteredHoldings.reduce((sum, h) => sum + (h.currentPrice || 
 
   async function handleEditPortfolio(id) {
     try {
-      const res = await fetch(`${API}/api/portfolios/${id}`, {
+      const res = await fetch(`${API_BASE}/api/portfolios/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editForm)
@@ -199,47 +193,8 @@ const totalValue = filteredHoldings.reduce((sum, h) => sum + (h.currentPrice || 
   }
 
   return (
-    <TooltipProvider>
-      <SidebarProvider className="min-h-svh w-full">
-        <Sidebar collapsible="icon" variant="sidebar">
-          <SidebarContent>
-            <SidebarGroup>
-              <SidebarGroupLabel>Navigation</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton isActive tooltip="Dashboard">
-                      <LayoutDashboard />
-                      <span>Dashboard</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <SidebarMenuButton tooltip="Settings">
-                      <Settings />
-                      <span>Settings</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          </SidebarContent>
-          <SidebarRail />
-        </Sidebar>
-
-        <SidebarInset>
-          <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4 md:px-6">
-            <SidebarTrigger />
-            <div className="mx-auto flex w-full max-w-[1280px] min-w-0 flex-1 items-center gap-2">
-              <h1 className="font-heading min-w-0 flex-1 truncate text-lg font-semibold tracking-tight text-foreground md:text-xl">
-                BloomBoard
-              </h1>
-              <Button variant="link" className="h-auto shrink-0 p-0 text-muted-foreground" asChild>
-                <Link to="/">Sign out</Link>
-              </Button>
-            </div>
-          </header>
-
-          <div className="mx-auto flex w-full max-w-[1280px] flex-1 flex-col gap-5 p-4 md:p-6">
+    <DashboardShell>
+      <div className="mx-auto flex w-full max-w-[1280px] flex-1 flex-col gap-5 p-4 md:p-6">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full gap-0">
               <TabsList variant="line" className="h-auto w-full min-w-0 justify-start gap-6 border-b border-border bg-transparent p-0">
                 <TabsTrigger value="holdings" className="rounded-none pb-3">Holdings</TabsTrigger>
@@ -519,9 +474,7 @@ const totalValue = filteredHoldings.reduce((sum, h) => sum + (h.currentPrice || 
                 </div>
               </TabsContent>
             </Tabs>
-          </div>
-        </SidebarInset>
-      </SidebarProvider>
-    </TooltipProvider>
+      </div>
+    </DashboardShell>
   )
 }

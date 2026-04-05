@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Eye, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import DashboardShell from '@/components/DashboardShell.jsx'
 import { Button } from '@/components/ui/button'
@@ -23,6 +24,7 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { API_BASE } from '@/lib/api.js'
+import { hasSession, isAdminSession } from '@/lib/session.js'
 import { cn } from '@/lib/utils'
 
 function selectClass() {
@@ -33,10 +35,13 @@ function selectClass() {
 }
 
 export default function AdminDashboardPage() {
+  const navigate = useNavigate()
+  const [gate, setGate] = useState('pending')
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [createForm, setCreateForm] = useState({ username: '', password: '', userRole: 'user' })
+  const createRoleRef = useRef(null)
   const [creating, setCreating] = useState(false)
 
   const [detailOpen, setDetailOpen] = useState(false)
@@ -66,24 +71,41 @@ export default function AdminDashboardPage() {
   }, [])
 
   useEffect(() => {
+    if (!hasSession()) {
+      navigate('/', { replace: true })
+      return
+    }
+    if (!isAdminSession()) {
+      navigate('/dashboard', { replace: true })
+      return
+    }
+    setGate('ok')
+  }, [navigate])
+
+  useEffect(() => {
+    if (gate !== 'ok') return
     document.title = 'Admin — BloomBoard'
     fetchUsers()
-  }, [fetchUsers])
+  }, [gate, fetchUsers])
 
   async function handleCreate(e) {
     e.preventDefault()
-    if (!createForm.username.trim() || !createForm.password) return
+    const fd = new FormData(e.currentTarget)
+    const username = String(fd.get('username') ?? '').trim()
+    const password = String(fd.get('password') ?? '')
+    // Prefer the live DOM value from the role <select> (ref) so we never send a stale role.
+    const roleRaw =
+      createRoleRef.current?.value ?? fd.get('userRole') ?? createForm.userRole
+    const userRole =
+      String(roleRaw ?? 'user').trim().toLowerCase() === 'admin' ? 'admin' : 'user'
+    if (!username || !password) return
     setCreating(true)
     setError('')
     try {
       const res = await fetch(`${API_BASE}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: createForm.username.trim(),
-          password: createForm.password,
-          userRole: createForm.userRole,
-        }),
+        body: JSON.stringify({ username, password, userRole }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Create failed')
@@ -104,25 +126,19 @@ export default function AdminDashboardPage() {
     setDetailLoading(true)
     const userId = userRow._id
     try {
-      const [uRes, pRes, hRes, wRes, sRes] = await Promise.all([
+      const [uRes, pRes, hRes] = await Promise.all([
         fetch(`${API_BASE}/api/auth/${userId}`),
         fetch(`${API_BASE}/api/portfolios/${userId}`),
         fetch(`${API_BASE}/api/holdings/user/${userId}`),
-        fetch(`${API_BASE}/api/watchlist/${userId}`),
-        fetch(`${API_BASE}/api/simulations/${userId}`),
       ])
       const user = await uRes.json()
       const portfolios = await pRes.json()
       const holdings = await hRes.json()
-      const watchlist = await wRes.json()
-      const simulations = await sRes.json()
       if (!uRes.ok) throw new Error(user.error || 'Failed to load user')
       setDetailData({
         user,
         portfolios: Array.isArray(portfolios) ? portfolios : [],
         holdings: Array.isArray(holdings) ? holdings : [],
-        watchlist: Array.isArray(watchlist) ? watchlist : [],
-        simulations: Array.isArray(simulations) ? simulations : [],
       })
     } catch (e) {
       setDetailError(e.message || 'Failed to load data')
@@ -135,7 +151,7 @@ export default function AdminDashboardPage() {
     setEditUser(u)
     setEditForm({
       username: u.username,
-      userRole: u.userRole || 'user',
+      userRole: String(u.userRole || '').toLowerCase() === 'admin' ? 'admin' : 'user',
       password: '',
     })
     setEditOpen(true)
@@ -147,7 +163,10 @@ export default function AdminDashboardPage() {
     setSaving(true)
     setError('')
     try {
-      const body = { username: editForm.username.trim(), userRole: editForm.userRole }
+      const body = {
+        username: editForm.username.trim(),
+        userRole: editForm.userRole === 'admin' ? 'admin' : 'user',
+      }
       if (editForm.password) body.password = editForm.password
       const res = await fetch(`${API_BASE}/api/auth/${editUser._id}`, {
         method: 'PUT',
@@ -179,6 +198,14 @@ export default function AdminDashboardPage() {
     }
   }
 
+  if (gate !== 'ok') {
+    return (
+      <div className="flex min-h-svh items-center justify-center bg-background text-sm text-muted-foreground">
+        Loading…
+      </div>
+    )
+  }
+
   return (
     <DashboardShell>
       <div className="mx-auto flex w-full max-w-[1280px] flex-1 flex-col gap-6 p-4 md:p-6">
@@ -188,7 +215,7 @@ export default function AdminDashboardPage() {
               User administration
             </h2>
             <p className="text-sm text-muted-foreground">
-              Manage accounts, roles, and inspect portfolios, holdings, watchlists, and simulations.
+              Manage accounts, roles, and inspect portfolios and holdings.
             </p>
           </div>
           <Button type="button" variant="outline" size="sm" onClick={fetchUsers} disabled={loading}>
@@ -214,6 +241,7 @@ export default function AdminDashboardPage() {
                 <Label htmlFor="adm-username">Username</Label>
                 <Input
                   id="adm-username"
+                  name="username"
                   value={createForm.username}
                   onChange={(e) => setCreateForm((f) => ({ ...f, username: e.target.value }))}
                   autoComplete="off"
@@ -223,6 +251,7 @@ export default function AdminDashboardPage() {
                 <Label htmlFor="adm-password">Password</Label>
                 <Input
                   id="adm-password"
+                  name="password"
                   type="password"
                   value={createForm.password}
                   onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
@@ -233,9 +262,13 @@ export default function AdminDashboardPage() {
                 <Label htmlFor="adm-role">Role</Label>
                 <select
                   id="adm-role"
+                  ref={createRoleRef}
+                  name="userRole"
                   className={selectClass()}
                   value={createForm.userRole}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, userRole: e.target.value }))}
+                  onChange={(e) =>
+                    setCreateForm((f) => ({ ...f, userRole: e.target.value }))
+                  }
                 >
                   <option value="user">User</option>
                   <option value="admin">Admin</option>
@@ -320,22 +353,31 @@ export default function AdminDashboardPage() {
           <SheetContent side="right" className="flex w-full flex-col overflow-y-auto sm:max-w-lg">
             <SheetHeader>
               <SheetTitle>User data</SheetTitle>
-              <SheetDescription>Portfolios, holdings, watchlist, and simulations for this account.</SheetDescription>
+              <SheetDescription>Portfolios and holdings for this account.</SheetDescription>
             </SheetHeader>
             {detailLoading ? (
               <p className="px-4 text-sm text-muted-foreground">Loading…</p>
             ) : detailError ? (
               <p className="px-4 text-sm text-destructive">{detailError}</p>
             ) : detailData ? (
-              <Tabs defaultValue="overview" className="flex flex-1 flex-col gap-4 px-4 pb-4">
-                <TabsList variant="line" className="h-auto w-full flex-wrap justify-start gap-2">
-                  <TabsTrigger value="overview">Overview</TabsTrigger>
-                  <TabsTrigger value="portfolios">Portfolios</TabsTrigger>
-                  <TabsTrigger value="holdings">Holdings</TabsTrigger>
-                  <TabsTrigger value="watchlist">Watchlist</TabsTrigger>
-                  <TabsTrigger value="simulations">Simulations</TabsTrigger>
-                </TabsList>
-                <TabsContent value="overview" className="mt-0 space-y-2 text-sm">
+              <Tabs defaultValue="overview" className="flex min-h-0 flex-1 flex-col gap-0 px-4 pb-4">
+                <div className="shrink-0 border-b border-border pb-3">
+                  <TabsList
+                    variant="line"
+                    className="!flex h-auto min-h-9 w-full flex-wrap items-center justify-start gap-x-3 gap-y-2 bg-transparent p-0"
+                  >
+                    <TabsTrigger value="overview" className="!grow-0 !basis-auto shrink-0">
+                      Overview
+                    </TabsTrigger>
+                    <TabsTrigger value="portfolios" className="!grow-0 !basis-auto shrink-0">
+                      Portfolios
+                    </TabsTrigger>
+                    <TabsTrigger value="holdings" className="!grow-0 !basis-auto shrink-0">
+                      Holdings
+                    </TabsTrigger>
+                  </TabsList>
+                </div>
+                <TabsContent value="overview" className="mt-4 space-y-2 text-sm outline-none">
                   <p>
                     <span className="text-muted-foreground">ID:</span>{' '}
                     <span className="font-mono text-xs">{detailData.user._id}</span>
@@ -344,7 +386,8 @@ export default function AdminDashboardPage() {
                     <span className="text-muted-foreground">Username:</span> {detailData.user.username}
                   </p>
                   <p>
-                    <span className="text-muted-foreground">Role:</span> {detailData.user.userRole || 'user'}
+                    <span className="text-muted-foreground">Role:</span>{' '}
+                    {detailData.user.userRole || 'user'}
                   </p>
                   <p>
                     <span className="text-muted-foreground">Created:</span>{' '}
@@ -353,7 +396,7 @@ export default function AdminDashboardPage() {
                       : '—'}
                   </p>
                 </TabsContent>
-                <TabsContent value="portfolios" className="mt-0 max-h-[50vh] overflow-auto">
+                <TabsContent value="portfolios" className="mt-4 max-h-[50vh] overflow-auto outline-none">
                   {detailData.portfolios.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No portfolios.</p>
                   ) : (
@@ -368,7 +411,7 @@ export default function AdminDashboardPage() {
                     </ul>
                   )}
                 </TabsContent>
-                <TabsContent value="holdings" className="mt-0 max-h-[50vh] overflow-auto">
+                <TabsContent value="holdings" className="mt-4 max-h-[50vh] overflow-auto outline-none">
                   {detailData.holdings.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No holdings.</p>
                   ) : (
@@ -397,36 +440,6 @@ export default function AdminDashboardPage() {
                         ))}
                       </TableBody>
                     </Table>
-                  )}
-                </TabsContent>
-                <TabsContent value="watchlist" className="mt-0 max-h-[50vh] overflow-auto">
-                  {detailData.watchlist.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No watchlist items.</p>
-                  ) : (
-                    <ul className="space-y-2 text-sm">
-                      {detailData.watchlist.map((w) => (
-                        <li key={w._id} className="rounded-md border border-border px-3 py-2">
-                          <span className="font-medium">{w.ticker}</span> — {w.name}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </TabsContent>
-                <TabsContent value="simulations" className="mt-0 max-h-[50vh] overflow-auto">
-                  {detailData.simulations.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No simulations.</p>
-                  ) : (
-                    <ul className="space-y-2 text-sm">
-                      {detailData.simulations.map((s) => (
-                        <li key={s._id} className="rounded-md border border-border px-3 py-2">
-                          <div className="font-medium">{s.simulationName}</div>
-                          <div className="text-muted-foreground">
-                            Horizon: {s.timeHorizon} · Growth: {s.growthRate} · Projected: $
-                            {s.projectedValue?.toFixed?.(2) ?? s.projectedValue}
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
                   )}
                 </TabsContent>
               </Tabs>

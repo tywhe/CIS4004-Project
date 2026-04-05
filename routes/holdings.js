@@ -18,6 +18,19 @@ async function getLivePrice(ticker) {
   }
 }
 
+// Get all holdings for a user across all portfolios
+router.get('/user/:userId', async (req, res) => {
+  try {
+    const Portfolio = require('../models/Portfolio');
+    const portfolios = await Portfolio.find({ userId: req.params.userId });
+    const portfolioIds = portfolios.map(p => p._id);
+    const holdings = await Holding.find({ portfolioId: { $in: portfolioIds } });
+    res.json(holdings);
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Get all holdings for a portfolio (with live prices)
 router.get('/:portfolioId', async (req, res) => {
   try {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronDown, ChevronUp, LayoutDashboard, Settings, Plus, Trash2, RefreshCw } from 'lucide-react'
+import { ChevronDown, ChevronUp, LayoutDashboard, Settings, Plus, Trash2, RefreshCw, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import {
@@ -30,9 +30,6 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
 const API = 'http://localhost:8080'
-
-// Hardcoded for now — replace with real portfolioId from login later
-const PORTFOLIO_ID = localStorage.getItem('portfolioId')
 
 function SortHead({ children, className, accent }) {
   return (
@@ -64,6 +61,8 @@ function GainLoss({ value }) {
 }
 
 export default function DashboardPage() {
+  const [activeTab, setActiveTab] = useState('holdings')
+  const [PORTFOLIO_ID, setPortfolioId] = useState(localStorage.getItem('portfolioId'))
   const [holdings, setHoldings] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -72,15 +71,27 @@ export default function DashboardPage() {
     ticker: '', name: '', assetClass: 'stock', sector: '', quantity: '', purchasePrice: '', notes: ''
   })
 
+  const [portfolios, setPortfolios] = useState([])
+  const [portfoliosLoading, setPortfoliosLoading] = useState(true)
+  const [showPortfolioForm, setShowPortfolioForm] = useState(false)
+  const [portfolioForm, setPortfolioForm] = useState({ portfolioName: '', portfolioType: 'investment' })
+  const [savingPortfolio, setSavingPortfolio] = useState(false)
+  const [editingPortfolio, setEditingPortfolio] = useState(null)
+  const [editForm, setEditForm] = useState({ portfolioName: '', portfolioType: 'investment' })
+  const [selectedPortfolioId, setSelectedPortfolioId] = useState(null)  
+
+  const USER_ID = localStorage.getItem('userId')
+
   useEffect(() => {
     document.title = 'BloomBoard'
     fetchHoldings()
+    fetchPortfolios()
   }, [])
 
   async function fetchHoldings() {
     setLoading(true)
     try {
-      const res = await fetch(`${API}/api/holdings/${PORTFOLIO_ID}`)
+      const res = await fetch(`${API}/api/holdings/user/${USER_ID}`)
       const data = await res.json()
       setHoldings(data)
     } catch (err) {
@@ -99,7 +110,7 @@ export default function DashboardPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form,
-          portfolioId: PORTFOLIO_ID,
+          portfolioId: selectedPortfolioId || PORTFOLIO_ID,
           quantity: parseFloat(form.quantity),
           purchasePrice: parseFloat(form.purchasePrice),
         })
@@ -115,16 +126,77 @@ export default function DashboardPage() {
     }
   }
 
-  async function handleDelete(id) {
+async function handleDelete(id) {
+  try {
+    await fetch(`${API}/api/holdings/${id}`, { method: 'DELETE' })
+    setHoldings(holdings.filter(h => h._id !== id))
+  } catch (err) {
+    console.error('Failed to delete holding', err)
+  }
+}
+
+const filteredHoldings = selectedPortfolioId
+  ? holdings.filter(h => h.portfolioId === selectedPortfolioId)
+  : holdings
+
+const totalValue = filteredHoldings.reduce((sum, h) => sum + (h.currentPrice || h.purchasePrice) * h.quantity, 0)
+
+  async function fetchPortfolios() {
+    setPortfoliosLoading(true)
     try {
-      await fetch(`${API}/api/holdings/${id}`, { method: 'DELETE' })
-      setHoldings(holdings.filter(h => h._id !== id))
+      const res = await fetch(`${API}/api/portfolios/${USER_ID}`)
+      const data = await res.json()
+      setPortfolios(data)
     } catch (err) {
-      console.error('Failed to delete holding', err)
+      console.error('Failed to fetch portfolios', err)
+    } finally {
+      setPortfoliosLoading(false)
     }
   }
 
-  const totalValue = holdings.reduce((sum, h) => sum + (h.currentPrice || h.purchasePrice) * h.quantity, 0)
+  async function handleAddPortfolio() {
+    if (!portfolioForm.portfolioName) return
+    setSavingPortfolio(true)
+    try {
+      const res = await fetch(`${API}/api/portfolios`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...portfolioForm, userId: USER_ID })
+      })
+      const newPortfolio = await res.json()
+      setPortfolios([...portfolios, newPortfolio])
+      setPortfolioForm({ portfolioName: '', portfolioType: 'investment' })
+      setShowPortfolioForm(false)
+    } catch (err) {
+      console.error('Failed to add portfolio', err)
+    } finally {
+      setSavingPortfolio(false)
+    }
+  }
+
+  async function handleDeletePortfolio(id) {
+    try {
+      await fetch(`${API}/api/portfolios/${id}`, { method: 'DELETE' })
+      setPortfolios(portfolios.filter(p => p._id !== id))
+    } catch (err) {
+      console.error('Failed to delete portfolio', err)
+    }
+  }
+
+  async function handleEditPortfolio(id) {
+    try {
+      const res = await fetch(`${API}/api/portfolios/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm)
+      })
+      const updated = await res.json()
+      setPortfolios(portfolios.map(p => p._id === id ? updated : p))
+      setEditingPortfolio(null)
+    } catch (err) {
+      console.error('Failed to update portfolio', err)
+    }
+  }
 
   return (
     <TooltipProvider>
@@ -168,7 +240,7 @@ export default function DashboardPage() {
           </header>
 
           <div className="mx-auto flex w-full max-w-[1280px] flex-1 flex-col gap-5 p-4 md:p-6">
-            <Tabs defaultValue="holdings" className="w-full gap-0">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full gap-0">
               <TabsList variant="line" className="h-auto w-full min-w-0 justify-start gap-6 border-b border-border bg-transparent p-0">
                 <TabsTrigger value="holdings" className="rounded-none pb-3">Holdings</TabsTrigger>
                 <TabsTrigger value="portfolios" className="rounded-none pb-3">Portfolios</TabsTrigger>
@@ -190,6 +262,16 @@ export default function DashboardPage() {
                     </Button>
                   </div>
                 </div>
+                {selectedPortfolioId && (
+                  <p className="text-xs text-muted-foreground">
+                    Showing holdings for: <span className="font-semibold text-foreground">
+                      {portfolios.find(p => p._id === selectedPortfolioId)?.portfolioName}
+                    </span>
+                    <button className="ml-2 underline" onClick={() => setSelectedPortfolioId(null)}>
+                      Show all
+                    </button>
+                  </p>
+                )}
 
                 {showForm && (
                   <Card className="p-4 mb-4 flex flex-wrap gap-3 items-end">
@@ -267,7 +349,7 @@ export default function DashboardPage() {
                           </TableCell>
                         </TableRow>
                       ) : (
-                        holdings.map(h => {
+                        filteredHoldings.map(h => {
                           const price = h.currentPrice || h.purchasePrice
                           const currentValue = price * h.quantity
                           const totalGainLoss = (price - h.purchasePrice) * h.quantity
@@ -283,7 +365,13 @@ export default function DashboardPage() {
                               <TableCell className="text-right">{h.quantity}</TableCell>
                               <TableCell className="text-right">{percentOfAccount.toFixed(1)}%</TableCell>
                               <TableCell className="text-right">
-                                <Button size="icon" variant="ghost" onClick={() => handleDelete(h._id)}>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  onClick={() => {
+                                    handleDelete(h._id)
+                                  }}
+                                >
                                   <Trash2 className="size-4 text-red-500" />
                                 </Button>
                               </TableCell>
@@ -297,9 +385,126 @@ export default function DashboardPage() {
               </TabsContent>
 
               <TabsContent value="portfolios" className="mt-6">
-                <div className="flex min-h-[240px] items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 px-4 py-12 text-center text-sm text-muted-foreground">
-                  Portfolio view — add content here later.
+                <div className="flex justify-between items-center mb-4">
+                  <p className="text-sm text-muted-foreground">
+                    {portfolios.length} portfolio{portfolios.length !== 1 ? 's' : ''}
+                  </p>
+                  <Button size="sm" onClick={() => setShowPortfolioForm(!showPortfolioForm)}>
+                    <Plus className="size-4 mr-1" /> New Portfolio
+                  </Button>
                 </div>
+
+                {showPortfolioForm && (
+                  <Card className="p-4 mb-4 flex flex-wrap gap-3 items-end">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-muted-foreground">Portfolio Name</label>
+                      <input
+                        className="border rounded px-2 py-1 text-sm w-40"
+                        placeholder="My Portfolio"
+                        value={portfolioForm.portfolioName}
+                        onChange={e => setPortfolioForm({ ...portfolioForm, portfolioName: e.target.value })}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-muted-foreground">Type</label>
+                      <select
+                        className="border rounded px-2 py-1 text-sm w-32 bg-background text-foreground"
+                        value={portfolioForm.portfolioType}
+                        onChange={e => setPortfolioForm({ ...portfolioForm, portfolioType: e.target.value })}
+                      >
+                        <option value="investment">Investment</option>
+                        <option value="theoretical">Theoretical</option>
+                        <option value="crypto">Crypto</option>
+                        <option value="retirement">Retirement</option>
+                      </select>
+                    </div>
+                    <Button size="sm" onClick={handleAddPortfolio} disabled={savingPortfolio}>
+                      {savingPortfolio ? 'Saving...' : 'Save'}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setShowPortfolioForm(false)}>Cancel</Button>
+                  </Card>
+                )}
+
+                {portfoliosLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading portfolios...</p>
+                ) : portfolios.length === 0 ? (
+                  <div className="flex min-h-[240px] items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 px-4 py-12 text-center text-sm text-muted-foreground">
+                    No portfolios yet — click New Portfolio to get started.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {portfolios.map(p => (
+                      <Card
+                        key={p._id}
+                        className="p-4 flex flex-col gap-3 cursor-pointer hover:border-primary transition-colors"
+                        onClick={() => {
+                          if (editingPortfolio === p._id) return
+                            setSelectedPortfolioId(p._id)
+                            setActiveTab('holdings')
+                        }}
+                      >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          {editingPortfolio === p._id ? (
+                            <div className="flex flex-col gap-2">
+                              <input
+                                className="border rounded px-2 py-1 text-sm w-full bg-background"
+                                value={editForm.portfolioName}
+                                onChange={e => setEditForm({ ...editForm, portfolioName: e.target.value })}
+                              />
+                              <select
+                                className="border rounded px-2 py-1 text-sm w-full bg-background text-foreground"
+                                value={editForm.portfolioType}
+                                onChange={e => setEditForm({ ...editForm, portfolioType: e.target.value })}
+                              >
+                                <option value="investment">Investment</option>
+                                <option value="theoretical">Theoretical</option>
+                                <option value="crypto">Crypto</option>
+                                <option value="retirement">Retirement</option>
+                              </select>
+                              <div className="flex gap-2">
+                                <Button size="sm" onClick={(e) => { e.stopPropagation(); handleEditPortfolio(p._id) }}>Save</Button>
+                                <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setEditingPortfolio(null) }}>Cancel</Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <h3 className="font-semibold text-foreground">{p.portfolioName}</h3>
+                              <span className="text-xs text-muted-foreground capitalize">{p.portfolioType}</span>
+                            </>
+                          )}
+                        </div>
+                        <div className="flex">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setEditingPortfolio(p._id)
+                              setEditForm({ portfolioName: p.portfolioName, portfolioType: p.portfolioType })
+                            }}
+                          >
+                            <Pencil className="size-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDeletePortfolio(p._id)
+                            }}
+                          >
+                            <Trash2 className="size-4 text-red-500" />
+                          </Button>
+                        </div>
+                      </div>
+                        <div className="text-xs text-muted-foreground">
+                          Created {new Date(p.createdAt).toLocaleDateString()}
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="watchlist" className="mt-6">

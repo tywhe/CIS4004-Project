@@ -1307,7 +1307,7 @@ export default function DashboardPage() {
                       return (
                         <TableRow
                           key={item._id}
-                          className={priceHitTarget ? 'border-l-2 border-l-green-500 bg-green-500/5 hover:bg-green-500/10' : ''}
+                          className={priceHitTarget ? 'bg-green-500/5 hover:bg-green-500/10' : ''}
                         >
                           {/* Symbol */}
                           <TableCell className="font-semibold">

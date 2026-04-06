@@ -62,9 +62,9 @@ How To Start The Application
 
 1. Open the terminal in the project root folder
 2. Have MongoDB be running locally
-3. Type npm install in the terminal
-4. Type npm run build
-5. Type npm start
+3. Run: npm install
+4. Run: npm run build
+5. Run: npm start
 
 A second server is not needed for React.
 
@@ -73,8 +73,6 @@ How To Navigate To The Application
 After starting the server, open:
 http://localhost:8080/
 
-Collections Needed in MongoDB
-
 1. Make sure MongoDB is running locally
 2. The MongoDB database used is: 
 	portfolio
@@ -82,9 +80,9 @@ Collections Needed in MongoDB
 	mongodb://localhost:27017/portfolio 
 4. Ensure database is available in MondoDB before running
 5. Collection needed is: 
-	users
-6. Users collection stores the following fields:
-	- email
-	- passwordHash
-	- role
+	- users
+	- portfolios
+	- holdings
+	- watchlists
+	- simulations
 

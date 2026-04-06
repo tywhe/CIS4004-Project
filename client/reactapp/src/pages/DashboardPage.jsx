@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
+import { LineChart, Line, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import { useNavigate } from 'react-router-dom'
 import { ChevronDown, ChevronUp, Plus, Trash2, RefreshCw, Pencil, MessageSquare, Check, X, Layers, TrendingUp } from 'lucide-react'
 import DashboardShell from '@/components/DashboardShell.jsx'
@@ -792,7 +793,7 @@ export default function DashboardPage() {
                     <SortHead className="text-right">Last Price</SortHead>
                     <SortHead className="text-right">Gain / Loss</SortHead>
                     <SortHead className="text-right">Current Value</SortHead>
-                    <SortHead className="text-right">Avg Cost</SortHead>
+                    <SortHead className="text-right">Cost Basis</SortHead>
                     <SortHead className="text-right">Quantity</SortHead>
                     <SortHead className="text-right" accent>% of Account</SortHead>
                     <TableHead />
@@ -819,6 +820,104 @@ export default function DashboardPage() {
                       const percentOfAccount = totalValue > 0 ? (currentValue / totalValue) * 100 : 0
                       const multiLot = g.lots.length > 1
 
+                      const isEditingThisRow = !multiLot && editingHolding === g.lots[0]._id
+
+                      // ── Inline edit row (single-lot) ──────────────────────────────────────
+                      if (isEditingThisRow) {
+                        return (
+                          <TableRow key={g._groupId} className="hover:bg-transparent">
+                            <TableCell colSpan={11} className="p-0">
+                              <div className="border-b border-border bg-muted/20 px-4 py-4">
+                                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                                  Editing {g.ticker}
+                                </p>
+                                <div className="flex flex-wrap gap-3 items-end">
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-xs text-muted-foreground">Name</label>
+                                    <input
+                                      className="border rounded px-2 py-1 text-sm w-40 bg-background"
+                                      placeholder="Apple Inc."
+                                      value={editHoldingForm.name}
+                                      onChange={e => setEditHoldingForm({ ...editHoldingForm, name: e.target.value })}
+                                    />
+                                  </div>
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-xs text-muted-foreground">Asset Class</label>
+                                    <select
+                                      className="border rounded px-2 py-1 text-sm w-28 bg-background text-foreground"
+                                      value={editHoldingForm.assetClass}
+                                      onChange={e => setEditHoldingForm({ ...editHoldingForm, assetClass: e.target.value })}
+                                    >
+                                      <option value="stock">Stock</option>
+                                      <option value="ETF">ETF</option>
+                                      <option value="crypto">Crypto</option>
+                                      <option value="bond">Bond</option>
+                                      <option value="other">Other</option>
+                                    </select>
+                                  </div>
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-xs text-muted-foreground">Sector</label>
+                                    <input
+                                      className="border rounded px-2 py-1 text-sm w-32 bg-background"
+                                      placeholder="Technology"
+                                      value={editHoldingForm.sector}
+                                      onChange={e => setEditHoldingForm({ ...editHoldingForm, sector: e.target.value })}
+                                    />
+                                  </div>
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-xs text-muted-foreground">Quantity</label>
+                                    <input
+                                      className="border rounded px-2 py-1 text-sm w-20 bg-background"
+                                      placeholder="10"
+                                      type="number"
+                                      step="any"
+                                      value={editHoldingForm.quantity}
+                                      onChange={e => setEditHoldingForm({ ...editHoldingForm, quantity: e.target.value })}
+                                    />
+                                  </div>
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-xs text-muted-foreground">Purchase Price ($)</label>
+                                    <input
+                                      className="border rounded px-2 py-1 text-sm w-24 bg-background"
+                                      placeholder="150.00"
+                                      type="number"
+                                      step="0.01"
+                                      value={editHoldingForm.purchasePrice}
+                                      onChange={e => setEditHoldingForm({ ...editHoldingForm, purchasePrice: e.target.value })}
+                                    />
+                                  </div>
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-xs text-muted-foreground">Acquired</label>
+                                    <input
+                                      className="border rounded px-2 py-1 text-sm w-36 bg-background"
+                                      type="date"
+                                      value={editHoldingForm.purchaseDate}
+                                      onChange={e => setEditHoldingForm({ ...editHoldingForm, purchaseDate: e.target.value })}
+                                    />
+                                  </div>
+                                  <div className="flex flex-col gap-1">
+                                    <label className="text-xs text-muted-foreground">Notes</label>
+                                    <input
+                                      className="border rounded px-2 py-1 text-sm w-36 bg-background"
+                                      placeholder="Optional"
+                                      value={editHoldingForm.notes}
+                                      onChange={e => setEditHoldingForm({ ...editHoldingForm, notes: e.target.value })}
+                                    />
+                                  </div>
+                                  <Button size="sm" onClick={() => handleSaveHolding(g.lots[0]._id)} disabled={savingHolding}>
+                                    {savingHolding ? 'Saving...' : 'Save'}
+                                  </Button>
+                                  <Button size="sm" variant="ghost" onClick={() => setEditingHolding(null)}>
+                                    Cancel
+                                  </Button>
+                                </div>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      }
+
+                      // ── Normal display row ────────────────────────────────────────────────
                       return (
                         <TableRow key={g._groupId}>
                           <TableCell className="font-semibold">{g.ticker}</TableCell>
@@ -1510,36 +1609,140 @@ export default function DashboardPage() {
                 No simulations yet — click New Simulation to get started.
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
                 {simulations.map(s => {
-                  const portfolio = portfolios.find(p => p._id === s.portfolioId)
+                  const portfolio = portfolios.find(p => mongoIdString(p._id) === mongoIdString(s.portfolioId))
+                  const rate = Number(s.growthRate) / 100
+                  const years = Number(s.timeHorizon)
+                  const projected = Number(s.projectedValue)
+                  // Derive starting value: PV = FV / (1+r)^t
+                  const startValue = rate !== 0 ? projected / Math.pow(1 + rate, years) : projected
+                  const totalGain = projected - startValue
+                  const isLoss = totalGain < 0
+                  const accentGreen = 'oklch(0.55 0.15 152)'
+                  const accentRed = 'oklch(0.55 0.20 27)'
+                  const accentColor = isLoss ? accentRed : accentGreen
+                  const multiplier = startValue > 0 ? projected / startValue : 1
+                  const halfwayYear = Math.round(years / 2)
+
+                  // Build year-by-year sparkline data
+                  const sparkData = Array.from({ length: years + 1 }, (_, yr) => ({
+                    yr,
+                    value: parseFloat((startValue * Math.pow(1 + rate, yr)).toFixed(2)),
+                  }))
+
                   return (
-                    <Card key={s._id} className="p-4 flex flex-col gap-3">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h3 className="font-semibold text-foreground">{s.simulationName}</h3>
-                          <span className="text-xs text-muted-foreground">{portfolio?.portfolioName || 'Unknown portfolio'}</span>
+                    <Card key={s._id} className="flex flex-col gap-0 overflow-hidden py-0">
+                      {/* Card header */}
+                      <div className="flex items-start justify-between px-4 pt-4 pb-3 border-b border-border/60">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-foreground truncate">{s.simulationName}</h3>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {portfolio?.portfolioName || 'Unknown portfolio'}
+                            <span className="mx-1.5 opacity-40">·</span>
+                            Run {s.createdAt && !isNaN(new Date(s.createdAt))
+                              ? new Date(s.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+                              : 'Unknown date'}
+                          </p>
                         </div>
-                        <Button size="icon" variant="ghost" onClick={() => handleDeleteSimulation(s._id)}>
+                        <Button size="icon" variant="ghost" className="shrink-0 -mt-1 -mr-1" onClick={() => handleDeleteSimulation(s._id)}>
                           <Trash2 className="size-4 text-red-500" />
                         </Button>
                       </div>
-                      <div className="flex flex-col gap-1 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Growth Rate</span>
-                          <span className="font-medium">{s.growthRate}%</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Time Horizon</span>
-                          <span className="font-medium">{s.timeHorizon} years</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Projected Value</span>
-                          <span className="font-semibold text-green-500">${s.projectedValue.toFixed(2)}</span>
+
+                      {/* Projected value hero */}
+                      <div className="px-4 pt-3 pb-1">
+                        <p className="text-xs text-muted-foreground">Projected value</p>
+                        <p className={`text-2xl font-bold tabular-nums tracking-tight ${isLoss ? 'text-red-500' : 'text-green-500'}`}>
+                          ${projected.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5">
+                          <span className="text-xs text-muted-foreground">
+                            from{' '}
+                            <span className="font-medium text-foreground">
+                              ${startValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          </span>
+                          <span className={`text-xs font-semibold ${isLoss ? 'text-red-500' : 'text-green-500'}`}>
+                            {isLoss ? '' : '+'}{totalGain.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                          <span className={`rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${isLoss ? 'bg-red-500/12 text-red-500' : 'bg-green-500/12 text-green-500'}`}>
+                            {multiplier.toFixed(2)}×
+                          </span>
                         </div>
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        Run {new Date(s.createdAt).toLocaleDateString()}
+
+                      {/* Sparkline */}
+                      <div className="px-0 pt-1 pb-0">
+                        <ResponsiveContainer width="100%" height={90}>
+                          <LineChart data={sparkData} margin={{ left: 0, right: 0, top: 8, bottom: 0 }}>
+                            <RechartsTooltip
+                              content={({ active, payload }) => {
+                                if (!active || !payload?.length) return null
+                                const { yr, value } = payload[0].payload
+                                return (
+                                  <div className="rounded-md border border-border bg-background/95 px-2 py-1.5 text-xs shadow-md">
+                                    <p className="font-medium">Year {yr}</p>
+                                    <p className={`font-semibold ${isLoss ? 'text-red-500' : 'text-green-500'}`}>${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                  </div>
+                                )
+                              }}
+                            />
+                            {halfwayYear > 0 && halfwayYear < years && (
+                              <ReferenceLine x={halfwayYear} stroke={accentColor} strokeDasharray="3 3" strokeOpacity={0.5} />
+                            )}
+                            <Line
+                              type="monotone"
+                              dataKey="value"
+                              stroke={accentColor}
+                              strokeWidth={2}
+                              dot={false}
+                              activeDot={{ r: 3, strokeWidth: 0 }}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+
+                      {/* Stats row */}
+                      <div className="grid grid-cols-3 divide-x divide-border border-t border-border/60">
+                        <div className="flex flex-col items-center py-2.5 px-1">
+                          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Growth</span>
+                          <span className="text-sm font-semibold tabular-nums">{s.growthRate}%</span>
+                          <span className="text-[10px] text-muted-foreground">per year</span>
+                        </div>
+                        <div className="flex flex-col items-center py-2.5 px-1">
+                          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Horizon</span>
+                          <span className="text-sm font-semibold tabular-nums">{s.timeHorizon}</span>
+                          <span className="text-[10px] text-muted-foreground">years</span>
+                        </div>
+                        <div className="flex flex-col items-center py-2.5 px-1">
+                          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">At 50%</span>
+                          <span className={`text-sm font-semibold tabular-nums ${isLoss ? 'text-red-500' : 'text-green-500'}`}>
+                            ${(startValue * Math.pow(1 + rate, halfwayYear)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">yr {halfwayYear}</span>
+                        </div>
+                      </div>
+
+                      {/* Progress bar: current vs projected */}
+                      <div className="px-4 pb-3 pt-2 border-t border-border/60">
+                        <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
+                          <span>Starting value</span>
+                          <span>Projected end</span>
+                        </div>
+                        <div className="relative h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${isLoss ? 'bg-red-500' : 'bg-green-500'}`}
+                            style={{ width: isLoss
+                              ? `${Math.min((projected / startValue) * 100, 100).toFixed(1)}%`
+                              : `${Math.min((startValue / projected) * 100, 100).toFixed(1)}%`
+                            }}
+                          />
+                        </div>
+                        <div className="flex justify-between text-[10px] tabular-nums mt-1">
+                          <span>${startValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                          <span className={`font-medium ${isLoss ? 'text-red-500' : 'text-green-500'}`}>${projected.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                        </div>
                       </div>
                     </Card>
                   )

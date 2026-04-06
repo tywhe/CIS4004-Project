@@ -106,7 +106,4 @@ app.use((req, res, next) => {
   res.sendFile(indexHtml);
 });
 
-app.listen(PORT, () => {
-  console.log(`Login route: http://localhost:${PORT}/`);
-  console.log(`Dashboard route: http://localhost:${PORT}/dashboard`);
-});
+app.listen(PORT);

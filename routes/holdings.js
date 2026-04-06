@@ -103,6 +103,27 @@ router.get('/user/:userId', async (req, res) => {
   }
 });
 
+// Price history (daily candles) for a ticker — used by Portfolio Value Over Time chart
+// IMPORTANT: must be declared BEFORE the /:portfolioId wildcard below
+router.get('/history/:ticker', async (req, res) => {
+  const ticker = req.params.ticker.toUpperCase().trim();
+  const resolution = req.query.resolution || 'D'; // D = daily, W = weekly
+  const toTs   = req.query.to   ? parseInt(req.query.to)   : Math.floor(Date.now() / 1000);
+  const fromTs = req.query.from ? parseInt(req.query.from) : toTs - 365 * 24 * 3600;
+  try {
+    const url = `${FINNHUB}/stock/candle?symbol=${ticker}&resolution=${resolution}&from=${fromTs}&to=${toTs}&token=${FINNHUB_KEY}`;
+    const candleRes = await fetch(url);
+    const candle = await candleRes.json();
+    if (!candle || candle.s === 'no_data' || !Array.isArray(candle.t)) {
+      return res.json({ ticker, candles: [] });
+    }
+    const candles = candle.t.map((ts, i) => ({ t: ts, c: candle.c[i] }));
+    res.json({ ticker, candles });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch price history' });
+  }
+});
+
 // Full real-time quote for a ticker — used by the Watchlist table
 // IMPORTANT: must be declared BEFORE the /:portfolioId wildcard below
 router.get('/quote/:ticker', async (req, res) => {

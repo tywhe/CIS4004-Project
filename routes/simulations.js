@@ -5,7 +5,7 @@ const Simulation = require('../models/Simulation');
 // Get all simulations for a user
 router.get('/:userId', async (req, res) => {
   try {
-    const simulations = await Simulation.find({ userId: req.params.userId });
+    const simulations = await Simulation.find({ userId: req.params.userId }).sort({ createdAt: -1 });
     res.json(simulations);
   } catch (err) {
     res.status(500).json({ error: 'Server error' });

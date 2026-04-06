@@ -103,6 +103,35 @@ router.get('/user/:userId', async (req, res) => {
   }
 });
 
+// Full real-time quote for a ticker — used by the Watchlist table
+// IMPORTANT: must be declared BEFORE the /:portfolioId wildcard below
+router.get('/quote/:ticker', async (req, res) => {
+  const ticker = req.params.ticker.toUpperCase().trim();
+  try {
+    const [quoteRes, profileRes] = await Promise.all([
+      fetch(`${FINNHUB}/quote?symbol=${ticker}&token=${FINNHUB_KEY}`),
+      fetch(`${FINNHUB}/stock/profile2?symbol=${ticker}&token=${FINNHUB_KEY}`),
+    ]);
+    const quote = await quoteRes.json();
+    const profile = await profileRes.json();
+
+    res.json({
+      ticker,
+      currentPrice: quote.c ?? null,
+      dayChange: quote.d ?? null,       // $ change
+      dayChangePct: quote.dp ?? null,   // % change
+      open: quote.o ?? null,
+      high: quote.h ?? null,
+      low: quote.l ?? null,
+      prevClose: quote.pc ?? null,
+      sector: profile?.finnhubIndustry ?? null,
+      fetchedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch quote' });
+  }
+});
+
 // Get all holdings for a portfolio
 router.get('/:portfolioId', async (req, res) => {
   try {
@@ -152,4 +181,5 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// Full real-time quote is now declared above the /:portfolioId wildcard. Keeping module export.
 module.exports = router;

@@ -138,6 +138,17 @@ export default function DashboardPage() {
     simulationName: '', portfolioId: '', growthRate: '', timeHorizon: ''
   })
 
+  const [watchlist, setWatchlist] = useState([])
+  const [watchlistLoading, setWatchlistLoading] = useState(false)
+  const [watchlistForm, setWatchlistForm] = useState({
+    ticker: '',
+    name: '',
+    assestClass: '',
+    currentPrice: '',
+    notes: '',
+  })
+      
+
   const USER_ID = localStorage.getItem('userId')
 
   useEffect(() => {
@@ -158,6 +169,7 @@ export default function DashboardPage() {
     fetchHoldings()
     fetchPortfolios()
     fetchSimulations()
+    fetchWatchlist()
   }, [gate])
 
   async function fetchHoldings() {
@@ -453,6 +465,74 @@ export default function DashboardPage() {
       console.error('Failed to fetch simulations', err)
     } finally {
       setSimulationsLoading(false)
+    }
+  }
+
+  async function fetchWatchlist() {
+    if (!USER_ID) {
+      setWatchlist([])
+      setWatchlistLoading(false)
+      return
+    }
+    setWatchlistLoading(true)
+    try {
+      const res = await fetch(`/api/watchlist/${USER_ID}`)
+      const data = await res.json()
+      setWatchlist(data)
+    } catch (err) {
+      console.error('Failed to fetch watchlist', err)
+    } finally {
+      setWatchlistLoading(false)
+    }
+  }
+
+  async function handleAddWatchlistItem() {
+  if (!watchlistForm.ticker || !watchlistForm.name) return
+
+  try {
+    const res = await fetch('/api/watchlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: USER_ID,
+        ticker: watchlistForm.ticker.trim().toUpperCase(),
+        name: watchlistForm.name.trim(),
+        assetClass: watchlistForm.assetClass.trim(),
+        currentPrice:
+          watchlistForm.currentPrice === ''
+            ? null
+            : parseFloat(watchlistForm.currentPrice),
+        notes: watchlistForm.notes.trim(),
+      }),
+    })
+
+    const data = await res.json()
+    console.log('watchlist add status:', res.status)
+    console.log('watchlist add response:', data)
+
+    if (res.ok) {
+      setWatchlist((prev) => [data, ...prev])
+      setWatchlistForm({
+        ticker: '',
+        name: '',
+        assetClass: '',
+        currentPrice: '',
+        notes: '',
+      })
+    } else {
+      alert(data.message || data.error || 'Failed to add watchlist item')
+    }
+  } catch (err) {
+    console.error('Failed to add watchlist item', err)
+  }
+}
+
+  async function handleDeleteWatchlistItem(id) {
+    try {
+      await fetch(`/api/watchlist/${id}`, { method: 'DELETE' })
+      setWatchlist((prev) => prev.filter((item) => item._id !== id))
+    } catch (err) {
+      console.error('Failed to delete watchlist item', err)
     }
   }
 
@@ -1026,10 +1106,113 @@ export default function DashboardPage() {
               </TabsContent>
 
               <TabsContent value="watchlist" className="mt-6">
-                <div className="flex min-h-[240px] items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 px-4 py-12 text-center text-sm text-muted-foreground">
-                  Watchlist — add content here later.
-                </div>
-              </TabsContent>
+                <Card className="p-4">
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-lg font-semibold">Watchlist</h2>
+                    </div>
+
+                    <div className="flex flex-wrap gap-3 items-end">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs text-muted-foreground">Ticker</label>
+                        <input
+                          type="text"
+                          placeholder="AAPL"
+                          value={watchlistForm.ticker}
+                          onChange={(e) => setWatchlistForm({ ...watchlistForm, ticker: e.target.value.toUpperCase() })}
+                          className="border rounded px-2 py-1 text-sm w-24 uppercase"
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs text-muted-foreground">Name</label>
+                        <input
+                          className="border rounded px-2 py-1 text-sm w-40"
+                          placeholder="Apple Inc."
+                          value={watchlistForm.name}
+                          onChange={(e) => setWatchlistForm({ ...watchlistForm, name: e.target.value })}
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs text-muted-foreground">Asset Class</label>
+                        <select
+                          className="border rounded px-2 py-1 text-sm w-28 bg-background text-foreground"
+                          value={watchlistForm.assetClass}
+                          onChange={(e) => setWatchlistForm({ ...watchlistForm, assetClass: e.target.value })}
+                        >
+                          <option value="">Select</option>
+                          <option value="stock">Stock</option>
+                          <option value="ETF">ETF</option>
+                          <option value="crypto">Crypto</option>
+                          <option value="bond">Bond</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs text-muted-foreground">Current Price</label>
+                        <input
+                          className="border rounded px-2 py-1 text-sm w-28"
+                          type="number"
+                          step="0.01"
+                          placeholder="150.00"
+                          value={watchlistForm.currentPrice}
+                          onChange={(e) => setWatchlistForm({ ...watchlistForm, currentPrice: e.target.value })}
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs text-muted-foreground">Notes</label>
+                        <input
+                          className="border rounded px-2 py-1 text-sm w-40"
+                          placeholder="Optional"
+                          value={watchlistForm.notes}
+                          onChange={(e) => setWatchlistForm({ ...watchlistForm, notes: e.target.value })}
+                        />
+                      </div>
+
+                      <Button size="sm" onClick={handleAddWatchlistItem}>
+                        <Plus className="size-4 mr-1" /> Add
+                      </Button>
+                    </div>
+
+                    {watchlistLoading ? (
+                      <p className="text-sm text-muted-foreground">Loading watchlist...</p>
+                    ) : watchlist.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No watchlist items yet.</p>
+                    ) : (
+                        <div className="space-y-3">
+                          {watchlist.map((item) => (
+                            <Card key={item._id} className="p-3">
+                              <div className="flex items-start justify-between">
+                                <div className="space-y-1">
+                                  <p className="font-semibold">{item.ticker} - {item.name}</p>
+                                  <p className="text-sm text-muted-foreground">
+                                    Type: {item.assetClass || 'N/A'}
+                                  </p>
+                                  <p className="text-sm text-muted-foreground">
+                                    Current Price: {item.currentPrice ? `$${Number(item.currentPrice).toFixed(2)}` : 'N/A'}
+                                  </p>
+                                  <p className="text-sm text-muted-foreground">
+                                    Notes: {item.notes || 'None'}
+                                  </p>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => handleDeleteWatchlistItem(item._id)}
+                                >
+                                    <Trash2 className="size-4" />
+                                  </Button>
+                                </div>
+                              </Card>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </Card>
+                  </TabsContent>
 
               <TabsContent value="simulations" className="mt-6">
                 <div className="flex justify-between items-center mb-4">

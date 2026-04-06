@@ -2,21 +2,84 @@ const express = require('express');
 const router = express.Router();
 const Holding = require('../models/Holding');
 
-const ALPHA_VANTAGE_KEY = process.env.ALPHA_VANTAGE_KEY;
+const FINNHUB_KEY = process.env.FINNHUB_API_KEY;
+const FINNHUB = 'https://finnhub.io/api/v1';
 
-// Fetch live price from Alpha Vantage
+// Returns current price for a ticker, or null on failure
 async function getLivePrice(ticker) {
   try {
-    const response = await fetch(
-      `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${ticker}&apikey=${ALPHA_VANTAGE_KEY}`
-    );
-    const data = await response.json();
-    const price = data['Global Quote']['05. price'];
-    return price ? parseFloat(price) : null;
-  } catch (err) {
+    const res = await fetch(`${FINNHUB}/quote?symbol=${ticker}&token=${FINNHUB_KEY}`);
+    const data = await res.json();
+    return (data && data.c) ? data.c : null;
+  } catch {
     return null;
   }
 }
+
+// Returns { name, sector } for a ticker from company profile, or null on failure
+async function getCompanyProfile(ticker) {
+  try {
+    const res = await fetch(`${FINNHUB}/stock/profile2?symbol=${ticker}&token=${FINNHUB_KEY}`);
+    const data = await res.json();
+    if (!data || !data.name) return null;
+    return { name: data.name, sector: data.finnhubIndustry || '' };
+  } catch {
+    return null;
+  }
+}
+
+// Ticker lookup — returns name, sector, and current price for use in the Add Holding form
+router.get('/lookup/:ticker', async (req, res) => {
+  const ticker = req.params.ticker.toUpperCase().trim();
+  try {
+    const [profile, price] = await Promise.all([
+      getCompanyProfile(ticker),
+      getLivePrice(ticker),
+    ]);
+
+    if (!profile && !price) {
+      return res.status(404).json({ error: `No data found for ticker "${ticker}"` });
+    }
+
+    res.json({
+      ticker,
+      name: profile?.name ?? '',
+      sector: profile?.sector ?? '',
+      currentPrice: price ?? null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Refresh live prices for all of a user's holdings (skips holdings updated within the last hour)
+router.post('/user/:userId/refresh', async (req, res) => {
+  try {
+    const Portfolio = require('../models/Portfolio');
+    const portfolios = await Portfolio.find({ userId: req.params.userId });
+    const portfolioIds = portfolios.map(p => p._id);
+    const holdings = await Holding.find({ portfolioId: { $in: portfolioIds } });
+
+    const ONE_HOUR = 60 * 60 * 1000;
+    const now = Date.now();
+
+    const updated = await Promise.all(holdings.map(async (h) => {
+      const lastUpdated = h.priceLastUpdated ? new Date(h.priceLastUpdated).getTime() : 0;
+      if (now - lastUpdated < ONE_HOUR) return h; // still fresh, skip
+      const livePrice = await getLivePrice(h.ticker);
+      if (livePrice) {
+        h.currentPrice = livePrice;
+        h.priceLastUpdated = new Date();
+        await h.save();
+      }
+      return h;
+    }));
+
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
 // Get all holdings for a user across all portfolios
 router.get('/user/:userId', async (req, res) => {
@@ -31,20 +94,11 @@ router.get('/user/:userId', async (req, res) => {
   }
 });
 
-// Get all holdings for a portfolio (with live prices)
+// Get all holdings for a portfolio
 router.get('/:portfolioId', async (req, res) => {
   try {
     const holdings = await Holding.find({ portfolioId: req.params.portfolioId });
-    const updated = await Promise.all(holdings.map(async (h) => {
-      const livePrice = await getLivePrice(h.ticker);
-      if (livePrice) {
-        h.currentPrice = livePrice;
-        h.priceLastUpdated = new Date();
-        await h.save();
-      }
-      return h;
-    }));
-    res.json(updated);
+    res.json(holdings);
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
   }
@@ -54,10 +108,13 @@ router.get('/:portfolioId', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const holding = new Holding(req.body);
-    const livePrice = await getLivePrice(holding.ticker);
-    if (livePrice) {
-      holding.currentPrice = livePrice;
-      holding.priceLastUpdated = new Date();
+    // Fetch live price on creation only if one wasn't already provided (e.g. via the lookup form)
+    if (!holding.currentPrice) {
+      const livePrice = await getLivePrice(holding.ticker);
+      if (livePrice) {
+        holding.currentPrice = livePrice;
+        holding.priceLastUpdated = new Date();
+      }
     }
     await holding.save();
     res.json(holding);

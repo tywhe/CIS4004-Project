@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronDown, ChevronUp, Plus, Trash2, RefreshCw, Pencil } from 'lucide-react'
+import { ChevronDown, ChevronUp, Plus, Trash2, RefreshCw, Pencil, MessageSquare } from 'lucide-react'
 import DashboardShell from '@/components/DashboardShell.jsx'
 import { HoldingsCompositionCard } from '@/components/HoldingsCompositionCard.jsx'
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { API_BASE } from '@/lib/api.js'
 import { hasSession, isAdminSession } from '@/lib/session.js'
 import { cn } from '@/lib/utils'
@@ -70,7 +71,7 @@ export default function DashboardPage() {
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
-    ticker: '', name: '', assetClass: 'stock', sector: '', quantity: '', purchasePrice: '', notes: ''
+    ticker: '', name: '', assetClass: 'stock', sector: '', quantity: '', purchasePrice: '', currentPrice: '', notes: ''
   })
 
   const [portfolios, setPortfolios] = useState([])
@@ -83,6 +84,8 @@ export default function DashboardPage() {
   const [selectedPortfolioId, setSelectedPortfolioId] = useState(null)
   const [holdingsError, setHoldingsError] = useState('')
   const [portfolioError, setPortfolioError] = useState('')
+  const [lookupLoading, setLookupLoading] = useState(false)
+  const [lookupError, setLookupError] = useState('')
 
   const USER_ID = localStorage.getItem('userId')
 
@@ -123,6 +126,20 @@ export default function DashboardPage() {
     }
   }
 
+  async function refreshPrices() {
+    if (!USER_ID) return
+    setLoading(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/holdings/user/${USER_ID}/refresh`, { method: 'POST' })
+      const data = await res.json()
+      if (res.ok) setHoldings(data)
+    } catch (err) {
+      console.error('Failed to refresh prices', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   async function handleAdd() {
     if (!form.ticker || !form.name || !form.quantity || !form.purchasePrice) return
     const portfolioId =
@@ -150,6 +167,7 @@ export default function DashboardPage() {
           portfolioId,
           quantity: parseFloat(form.quantity),
           purchasePrice: parseFloat(form.purchasePrice),
+          ...(form.currentPrice !== '' && { currentPrice: parseFloat(form.currentPrice), priceLastUpdated: new Date() }),
         }),
       })
       const data = await res.json().catch(() => ({}))
@@ -162,7 +180,7 @@ export default function DashboardPage() {
         return
       }
       setHoldings((prev) => [...prev, data])
-      setForm({ ticker: '', name: '', assetClass: 'stock', sector: '', quantity: '', purchasePrice: '', notes: '' })
+      setForm({ ticker: '', name: '', assetClass: 'stock', sector: '', quantity: '', purchasePrice: '', currentPrice: '', notes: '' })
       setShowForm(false)
     } catch (err) {
       console.error('Failed to add holding', err)
@@ -209,6 +227,30 @@ export default function DashboardPage() {
       console.error('Failed to fetch portfolios', err)
     } finally {
       setPortfoliosLoading(false)
+    }
+  }
+
+  async function handleLookup() {
+    if (!form.ticker.trim()) return
+    setLookupLoading(true)
+    setLookupError('')
+    try {
+      const res = await fetch(`${API_BASE}/api/holdings/lookup/${encodeURIComponent(form.ticker.trim())}`)
+      const data = await res.json()
+      if (!res.ok) {
+        setLookupError(data.error ?? 'Ticker not found.')
+        return
+      }
+      setForm((prev) => ({
+        ...prev,
+        name: data.name || prev.name,
+        sector: data.sector || prev.sector,
+        currentPrice: data.currentPrice ?? prev.currentPrice,
+      }))
+    } catch (err) {
+      setLookupError('Could not reach the server.')
+    } finally {
+      setLookupLoading(false)
     }
   }
 
@@ -330,8 +372,8 @@ export default function DashboardPage() {
                     Total Value: <span className="font-semibold text-foreground">${totalValue.toFixed(2)}</span>
                   </p>
                   <div className="flex gap-2">
-                    <Button size="sm" variant="outline" onClick={fetchHoldings} disabled={loading}>
-                      <RefreshCw className={cn("size-4 mr-1", loading && "animate-spin")} /> Refresh
+                    <Button size="sm" variant="outline" onClick={refreshPrices} disabled={loading}>
+                      <RefreshCw className={cn("size-4 mr-1", loading && "animate-spin")} /> Refresh Prices
                     </Button>
                     <Button
                       size="sm"
@@ -363,49 +405,73 @@ export default function DashboardPage() {
                 ) : null}
 
                 {showForm && (
-                  <Card className="p-4 mb-4 flex flex-wrap gap-3 items-end">
-                    <div className="flex flex-col gap-1">
-                      <label className="text-xs text-muted-foreground">Ticker</label>
-                      <input className="border rounded px-2 py-1 text-sm w-24" placeholder="AAPL" value={form.ticker} onChange={e => setForm({ ...form, ticker: e.target.value })} />
+                  <Card className="p-4 mb-4">
+                    {/* Row 1: Ticker lookup */}
+                    <div className="flex flex-wrap gap-3 items-end mb-3">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs text-muted-foreground">Ticker</label>
+                        <input
+                          className="border rounded px-2 py-1 text-sm w-24 uppercase"
+                          placeholder="AAPL"
+                          value={form.ticker}
+                          onChange={e => setForm({ ...form, ticker: e.target.value.toUpperCase() })}
+                          onKeyDown={e => e.key === 'Enter' && handleLookup()}
+                        />
+                      </div>
+                      <Button size="sm" variant="outline" onClick={handleLookup} disabled={lookupLoading || !form.ticker.trim()}>
+                        {lookupLoading ? 'Looking up...' : 'Look Up'}
+                      </Button>
+                      {lookupError && (
+                        <p className="text-xs text-destructive self-end">{lookupError}</p>
+                      )}
+                      {form.currentPrice !== '' && (
+                        <p className="text-xs text-muted-foreground self-end">
+                          Current price: <span className="font-medium text-foreground">${Number(form.currentPrice).toFixed(2)}</span>
+                        </p>
+                      )}
                     </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-xs text-muted-foreground">Name</label>
-                      <input className="border rounded px-2 py-1 text-sm w-32" placeholder="Apple Inc." value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+
+                    {/* Row 2: Auto-filled + manual fields */}
+                    <div className="flex flex-wrap gap-3 items-end">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs text-muted-foreground">Name</label>
+                        <input className="border rounded px-2 py-1 text-sm w-40" placeholder="Apple Inc." value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs text-muted-foreground">Asset Class</label>
+                        <select
+                          className="border rounded px-2 py-1 text-sm w-28 bg-background text-foreground"
+                          value={form.assetClass}
+                          onChange={e => setForm({ ...form, assetClass: e.target.value })}
+                        >
+                          <option value="stock">Stock</option>
+                          <option value="ETF">ETF</option>
+                          <option value="crypto">Crypto</option>
+                          <option value="bond">Bond</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs text-muted-foreground">Sector</label>
+                        <input className="border rounded px-2 py-1 text-sm w-32" placeholder="Technology" value={form.sector} onChange={e => setForm({ ...form, sector: e.target.value })} />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs text-muted-foreground">Quantity</label>
+                        <input className="border rounded px-2 py-1 text-sm w-20" placeholder="10" type="number" value={form.quantity} onChange={e => setForm({ ...form, quantity: e.target.value })} />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs text-muted-foreground">Purchase Price ($)</label>
+                        <input className="border rounded px-2 py-1 text-sm w-24" placeholder="150.00" type="number" value={form.purchasePrice} onChange={e => setForm({ ...form, purchasePrice: e.target.value })} />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs text-muted-foreground">Notes</label>
+                        <input className="border rounded px-2 py-1 text-sm w-36" placeholder="Optional" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
+                      </div>
+                      <Button size="sm" onClick={handleAdd} disabled={saving}>
+                        {saving ? 'Saving...' : 'Save'}
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => { setShowForm(false); setLookupError('') }}>Cancel</Button>
                     </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-xs text-muted-foreground">Asset Class</label>
-                      <select 
-                        className="border rounded px-2 py-1 text-sm w-28 bg-background text-foreground" 
-                        value={form.assetClass} 
-                        onChange={e => setForm({ ...form, assetClass: e.target.value })}
-                      >
-                        <option value="stock">Stock</option>
-                        <option value="ETF">ETF</option>
-                        <option value="crypto">Crypto</option>
-                        <option value="bond">Bond</option>
-                        <option value="other">Other</option>
-                      </select>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-xs text-muted-foreground">Sector</label>
-                      <input className="border rounded px-2 py-1 text-sm w-28" placeholder="Technology" value={form.sector} onChange={e => setForm({ ...form, sector: e.target.value })} />
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-xs text-muted-foreground">Quantity</label>
-                      <input className="border rounded px-2 py-1 text-sm w-20" placeholder="10" type="number" value={form.quantity} onChange={e => setForm({ ...form, quantity: e.target.value })} />
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-xs text-muted-foreground">Purchase Price ($)</label>
-                      <input className="border rounded px-2 py-1 text-sm w-24" placeholder="150.00" type="number" value={form.purchasePrice} onChange={e => setForm({ ...form, purchasePrice: e.target.value })} />
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-xs text-muted-foreground">Notes</label>
-                      <input className="border rounded px-2 py-1 text-sm w-32" placeholder="Optional" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
-                    </div>
-                    <Button size="sm" onClick={handleAdd} disabled={saving}>
-                      {saving ? 'Saving...' : 'Save'}
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setShowForm(false)}>Cancel</Button>
                   </Card>
                 )}
 
@@ -428,6 +494,8 @@ export default function DashboardPage() {
                       <TableRow className="hover:bg-transparent">
                         <SortHead>Symbol</SortHead>
                         <SortHead>Name</SortHead>
+                        <SortHead>Asset Class</SortHead>
+                        <SortHead>Sector</SortHead>
                         <SortHead className="text-right">Last Price</SortHead>
                         <SortHead className="text-right">Total Gain/Loss</SortHead>
                         <SortHead className="text-right">Current Value</SortHead>
@@ -440,13 +508,13 @@ export default function DashboardPage() {
                     <TableBody>
                       {loading ? (
                         <TableRow className="hover:bg-transparent">
-                          <TableCell colSpan={9} className="py-10 text-center text-sm text-muted-foreground">
+                          <TableCell colSpan={11} className="py-10 text-center text-sm text-muted-foreground">
                             Loading holdings...
                           </TableCell>
                         </TableRow>
                       ) : holdings.length === 0 ? (
                         <TableRow className="hover:bg-transparent">
-                          <TableCell colSpan={9} className="py-10 text-center text-sm italic text-muted-foreground">
+                          <TableCell colSpan={11} className="py-10 text-center text-sm italic text-muted-foreground">
                             No holdings yet — click Add Holding to get started.
                           </TableCell>
                         </TableRow>
@@ -469,8 +537,18 @@ export default function DashboardPage() {
                             <TableRow key={h._id ?? h.ticker}>
                               <TableCell className="font-semibold">{h.ticker}</TableCell>
                               <TableCell className="text-muted-foreground">{h.name}</TableCell>
+                              <TableCell className="capitalize text-muted-foreground">{h.assetClass ?? '—'}</TableCell>
+                              <TableCell className="text-muted-foreground">{h.sector || '—'}</TableCell>
                               <TableCell className="text-right">
-                                {Number.isFinite(price) ? `$${price.toFixed(2)}` : '—'}
+                                <div>{Number.isFinite(price) ? `$${price.toFixed(2)}` : '—'}</div>
+                                {h.priceLastUpdated && (
+                                  <div className="text-[10px] text-muted-foreground/70">
+                                    {new Date(h.priceLastUpdated).toLocaleString(undefined, {
+                                      month: 'short', day: 'numeric',
+                                      hour: 'numeric', minute: '2-digit',
+                                    })}
+                                  </div>
+                                )}
                               </TableCell>
                               <TableCell className="text-right">
                                 <GainLoss value={totalGainLoss} />
@@ -486,15 +564,29 @@ export default function DashboardPage() {
                               </TableCell>
                               <TableCell className="text-right">{percentOfAccount.toFixed(1)}%</TableCell>
                               <TableCell className="text-right">
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() => {
-                                    handleDelete(h._id)
-                                  }}
-                                >
-                                  <Trash2 className="size-4 text-red-500" />
-                                </Button>
+                                <div className="flex items-center justify-end gap-1">
+                                  {h.notes && (
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button size="icon" variant="ghost" className="size-8 cursor-default">
+                                            <MessageSquare className="size-4 text-muted-foreground" />
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="left" className="max-w-[220px] text-xs">
+                                          {h.notes}
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  )}
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={() => handleDelete(h._id)}
+                                  >
+                                    <Trash2 className="size-4 text-red-500" />
+                                  </Button>
+                                </div>
                               </TableCell>
                             </TableRow>
                           )

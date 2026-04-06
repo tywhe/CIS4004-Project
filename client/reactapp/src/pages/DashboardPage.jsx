@@ -621,43 +621,45 @@ export default function DashboardPage() {
                 ) : null}
 
                 {showPortfolioForm && (
-                  <Card className="p-4 mb-4 flex flex-wrap gap-3 items-end">
-                    <div className="flex flex-col gap-1">
-                      <label className="text-xs text-muted-foreground">Portfolio Name</label>
-                      <input
-                        className="border rounded px-2 py-1 text-sm w-40"
-                        placeholder="My Portfolio"
-                        value={portfolioForm.portfolioName}
-                        onChange={e => setPortfolioForm({ ...portfolioForm, portfolioName: e.target.value })}
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-xs text-muted-foreground">Type</label>
-                      <select
-                        className="border rounded px-2 py-1 text-sm w-32 bg-background text-foreground"
-                        value={portfolioForm.portfolioType}
-                        onChange={e => setPortfolioForm({ ...portfolioForm, portfolioType: e.target.value })}
+                  <Card className="p-4 mb-4">
+                    <div className="flex flex-wrap gap-3 items-end">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs text-muted-foreground">Portfolio Name</label>
+                        <input
+                          className="border rounded px-2 py-1 text-sm w-40"
+                          placeholder="My Portfolio"
+                          value={portfolioForm.portfolioName}
+                          onChange={e => setPortfolioForm({ ...portfolioForm, portfolioName: e.target.value })}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-xs text-muted-foreground">Type</label>
+                        <select
+                          className="border rounded px-2 py-1 text-sm w-32 bg-background text-foreground"
+                          value={portfolioForm.portfolioType}
+                          onChange={e => setPortfolioForm({ ...portfolioForm, portfolioType: e.target.value })}
+                        >
+                          <option value="investment">Investment</option>
+                          <option value="theoretical">Theoretical</option>
+                          <option value="crypto">Crypto</option>
+                          <option value="retirement">Retirement</option>
+                        </select>
+                      </div>
+                      <Button type="button" size="sm" onClick={handleAddPortfolio} disabled={savingPortfolio}>
+                        {savingPortfolio ? 'Saving...' : 'Save'}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setPortfolioError('')
+                          setShowPortfolioForm(false)
+                        }}
                       >
-                        <option value="investment">Investment</option>
-                        <option value="theoretical">Theoretical</option>
-                        <option value="crypto">Crypto</option>
-                        <option value="retirement">Retirement</option>
-                      </select>
+                        Cancel
+                      </Button>
                     </div>
-                    <Button type="button" size="sm" onClick={handleAddPortfolio} disabled={savingPortfolio}>
-                      {savingPortfolio ? 'Saving...' : 'Save'}
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        setPortfolioError('')
-                        setShowPortfolioForm(false)
-                      }}
-                    >
-                      Cancel
-                    </Button>
                   </Card>
                 )}
 

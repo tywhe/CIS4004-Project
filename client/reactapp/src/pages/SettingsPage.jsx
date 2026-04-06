@@ -1,10 +1,10 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import DashboardShell from '@/components/DashboardShell.jsx'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-// pulls in our theme state and the toggle function from context
 import { useTheme } from '@/lib/ThemeContext.jsx'
-import { Moon, Sun } from 'lucide-react'
+import { ArrowLeft, Moon, Sun } from 'lucide-react'
 import { API_BASE } from '@/lib/api.js'
 
 export default function SettingsPage() {
@@ -146,6 +146,11 @@ export default function SettingsPage() {
             </Button>
           </form>
         </Card>
+        <Button variant="outline" size="sm" asChild>
+          <Link to="/dashboard">
+            <ArrowLeft className="size-4 mr-1" /> Back to Dashboard
+          </Link>
+        </Button>
       </div>
     </DashboardShell>
   )

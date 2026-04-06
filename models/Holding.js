@@ -10,6 +10,7 @@ const HoldingSchema = new mongoose.Schema({
   purchasePrice: { type: Number, required: true },
   currentPrice: { type: Number },
   priceLastUpdated: { type: Date },
+  purchaseDate: { type: Date },
   notes: { type: String }
 }, { timestamps: true });
 

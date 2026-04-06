@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronDown, ChevronUp, Plus, Trash2, RefreshCw, Pencil, MessageSquare } from 'lucide-react'
+import { ChevronDown, ChevronUp, Plus, Trash2, RefreshCw, Pencil, MessageSquare, Check, X, Layers } from 'lucide-react'
 import DashboardShell from '@/components/DashboardShell.jsx'
 import { HoldingsCompositionCard } from '@/components/HoldingsCompositionCard.jsx'
 import { Button } from '@/components/ui/button'
@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { API_BASE } from '@/lib/api.js'
 import { hasSession, isAdminSession } from '@/lib/session.js'
 import { cn } from '@/lib/utils'
@@ -26,6 +27,46 @@ function mongoIdString(value) {
     return String(value.$oid)
   }
   return String(value)
+}
+
+/** Groups an array of holdings by ticker+portfolioId, computing avg cost basis and totals. */
+function groupHoldings(holdings) {
+  const map = new Map()
+  for (const h of holdings) {
+    const key = `${h.ticker}__${mongoIdString(h.portfolioId)}`
+    if (!map.has(key)) {
+      map.set(key, { ticker: h.ticker, portfolioId: h.portfolioId, lots: [] })
+    }
+    map.get(key).lots.push(h)
+  }
+  return Array.from(map.values()).map(({ ticker, portfolioId, lots }) => {
+    const totalQty = lots.reduce((s, l) => s + Number(l.quantity), 0)
+    const avgCost = lots.reduce((s, l) => s + Number(l.purchasePrice) * Number(l.quantity), 0) / totalQty
+    // Use the most recently updated currentPrice across lots, fallback to avgCost
+    const latestLot = lots.reduce((a, b) => {
+      const aDate = a.priceLastUpdated ? new Date(a.priceLastUpdated) : 0
+      const bDate = b.priceLastUpdated ? new Date(b.priceLastUpdated) : 0
+      return bDate > aDate ? b : a
+    })
+    const currentPrice = latestLot.currentPrice ?? avgCost
+    const priceLastUpdated = latestLot.priceLastUpdated
+    // Use shared metadata from the first lot
+    const first = lots[0]
+    return {
+      _groupId: `${ticker}__${mongoIdString(portfolioId)}`,
+      ticker,
+      portfolioId,
+      name: first.name,
+      assetClass: first.assetClass,
+      sector: first.sector,
+      notes: first.notes,
+      totalQty,
+      avgCost,
+      currentPrice,
+      priceLastUpdated,
+      lots,
+    }
+  })
 }
 
 function SortHead({ children, className, accent }) {
@@ -71,7 +112,7 @@ export default function DashboardPage() {
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
-    ticker: '', name: '', assetClass: 'stock', sector: '', quantity: '', purchasePrice: '', currentPrice: '', notes: ''
+    ticker: '', name: '', assetClass: 'stock', sector: '', quantity: '', purchasePrice: '', currentPrice: '', purchaseDate: new Date().toISOString().slice(0, 10), notes: ''
   })
 
   const [portfolios, setPortfolios] = useState([])
@@ -86,6 +127,9 @@ export default function DashboardPage() {
   const [portfolioError, setPortfolioError] = useState('')
   const [lookupLoading, setLookupLoading] = useState(false)
   const [lookupError, setLookupError] = useState('')
+  const [editingHolding, setEditingHolding] = useState(null) // _id of row being edited
+  const [editHoldingForm, setEditHoldingForm] = useState({})
+  const [savingHolding, setSavingHolding] = useState(false)
   const [simulations, setSimulations] = useState([])
   const [simulationsLoading, setSimulationsLoading] = useState(true)
   const [showSimulationForm, setShowSimulationForm] = useState(false)
@@ -175,6 +219,7 @@ export default function DashboardPage() {
           portfolioId,
           quantity: parseFloat(form.quantity),
           purchasePrice: parseFloat(form.purchasePrice),
+          purchaseDate: form.purchaseDate || new Date().toISOString().slice(0, 10),
           ...(form.currentPrice !== '' && { currentPrice: parseFloat(form.currentPrice), priceLastUpdated: new Date() }),
         }),
       })
@@ -188,7 +233,7 @@ export default function DashboardPage() {
         return
       }
       setHoldings((prev) => [...prev, data])
-      setForm({ ticker: '', name: '', assetClass: 'stock', sector: '', quantity: '', purchasePrice: '', currentPrice: '', notes: '' })
+      setForm({ ticker: '', name: '', assetClass: 'stock', sector: '', quantity: '', purchasePrice: '', currentPrice: '', purchaseDate: new Date().toISOString().slice(0, 10), notes: '' })
       setShowForm(false)
     } catch (err) {
       console.error('Failed to add holding', err)
@@ -235,6 +280,49 @@ export default function DashboardPage() {
       console.error('Failed to fetch portfolios', err)
     } finally {
       setPortfoliosLoading(false)
+    }
+  }
+
+  function startEditHolding(h) {
+    setEditingHolding(h._id)
+    setEditHoldingForm({
+      ticker: h.ticker ?? '',
+      name: h.name ?? '',
+      assetClass: h.assetClass ?? 'stock',
+      sector: h.sector ?? '',
+      quantity: h.quantity ?? '',
+      purchasePrice: h.purchasePrice ?? '',
+      purchaseDate: h.purchaseDate ? new Date(h.purchaseDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+      notes: h.notes ?? '',
+    })
+  }
+
+  async function handleSaveHolding(id) {
+    setSavingHolding(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/holdings/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ticker: editHoldingForm.ticker.trim().toUpperCase(),
+          name: editHoldingForm.name.trim(),
+          assetClass: editHoldingForm.assetClass,
+          sector: editHoldingForm.sector.trim(),
+          quantity: parseFloat(editHoldingForm.quantity),
+          purchasePrice: parseFloat(editHoldingForm.purchasePrice),
+          purchaseDate: editHoldingForm.purchaseDate || null,
+          notes: editHoldingForm.notes.trim(),
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setHoldings((prev) => prev.map((h) => (h._id === id ? data : h)))
+        setEditingHolding(null)
+      }
+    } catch (err) {
+      console.error('Failed to save holding', err)
+    } finally {
+      setSavingHolding(false)
     }
   }
 
@@ -530,6 +618,10 @@ export default function DashboardPage() {
                         <input className="border rounded px-2 py-1 text-sm w-24" placeholder="150.00" type="number" value={form.purchasePrice} onChange={e => setForm({ ...form, purchasePrice: e.target.value })} />
                       </div>
                       <div className="flex flex-col gap-1">
+                        <label className="text-xs text-muted-foreground">Acquired</label>
+                        <input className="border rounded px-2 py-1 text-sm w-36" type="date" value={form.purchaseDate} onChange={e => setForm({ ...form, purchaseDate: e.target.value })} />
+                      </div>
+                      <div className="flex flex-col gap-1">
                         <label className="text-xs text-muted-foreground">Notes</label>
                         <input className="border rounded px-2 py-1 text-sm w-36" placeholder="Optional" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
                       </div>
@@ -565,7 +657,7 @@ export default function DashboardPage() {
                         <SortHead className="text-right">Last Price</SortHead>
                         <SortHead className="text-right">Gain / Loss</SortHead>
                         <SortHead className="text-right">Current Value</SortHead>
-                        <SortHead className="text-right">Purchase Price</SortHead>
+                        <SortHead className="text-right">Avg Cost</SortHead>
                         <SortHead className="text-right">Quantity</SortHead>
                         <SortHead className="text-right" accent>% of Account</SortHead>
                         <TableHead />
@@ -585,76 +677,139 @@ export default function DashboardPage() {
                           </TableCell>
                         </TableRow>
                       ) : (
-                        filteredHoldings.map((h) => {
-                          const qty = Number(h.quantity)
-                          const purchase = Number(h.purchasePrice)
-                          const last = Number(h.currentPrice ?? h.purchasePrice)
-                          const price = Number.isFinite(last) ? last : purchase
-                          const currentValue =
-                            Number.isFinite(price) && Number.isFinite(qty) ? price * qty : NaN
-                          const totalGainLoss =
-                            Number.isFinite(price) && Number.isFinite(purchase) && Number.isFinite(qty)
-                              ? (price - purchase) * qty
-                              : NaN
-                          const percentOfAccount = totalValue > 0 && Number.isFinite(currentValue)
-                            ? (currentValue / totalValue) * 100
-                            : 0
+                        groupHoldings(filteredHoldings).map((g) => {
+                          const price = Number(g.currentPrice)
+                          const currentValue = price * g.totalQty
+                          const totalGainLoss = (price - g.avgCost) * g.totalQty
+                          const percentOfAccount = totalValue > 0 ? (currentValue / totalValue) * 100 : 0
+                          const multiLot = g.lots.length > 1
+
                           return (
-                            <TableRow key={h._id ?? h.ticker}>
-                              <TableCell className="font-semibold">{h.ticker}</TableCell>
+                            <TableRow key={g._groupId}>
+                              <TableCell className="font-semibold">{g.ticker}</TableCell>
+
+                              {/* Name */}
                               <TableCell className="max-w-[130px] text-muted-foreground">
-                                {h.name && h.name.length > 18 ? (
+                                {g.name && g.name.length > 18 ? (
                                   <TooltipProvider>
                                     <Tooltip>
-                                      <TooltipTrigger className="block max-w-full truncate text-left">{h.name}</TooltipTrigger>
-                                      <TooltipContent side="top" className="text-xs">{h.name}</TooltipContent>
+                                      <TooltipTrigger className="block max-w-full truncate text-left">{g.name}</TooltipTrigger>
+                                      <TooltipContent side="top" className="text-xs">{g.name}</TooltipContent>
                                     </Tooltip>
                                   </TooltipProvider>
-                                ) : (h.name || '—')}
+                                ) : (g.name || '—')}
                               </TableCell>
-                              <TableCell className="w-16 capitalize text-muted-foreground text-xs">{h.assetClass ?? '—'}</TableCell>
+
+                              {/* Type */}
+                              <TableCell className="w-16 capitalize text-muted-foreground text-xs">{g.assetClass ?? '—'}</TableCell>
+
+                              {/* Sector */}
                               <TableCell className="max-w-[120px] text-muted-foreground">
-                                {h.sector && h.sector.length > 16 ? (
+                                {g.sector && g.sector.length > 16 ? (
                                   <TooltipProvider>
                                     <Tooltip>
-                                      <TooltipTrigger className="block max-w-full truncate text-left">{h.sector}</TooltipTrigger>
-                                      <TooltipContent side="top" className="text-xs">{h.sector}</TooltipContent>
+                                      <TooltipTrigger className="block max-w-full truncate text-left">{g.sector}</TooltipTrigger>
+                                      <TooltipContent side="top" className="text-xs">{g.sector}</TooltipContent>
                                     </Tooltip>
                                   </TooltipProvider>
-                                ) : (h.sector || '—')}
+                                ) : (g.sector || '—')}
                               </TableCell>
+
+                              {/* Last Price */}
                               <TableCell className="text-right">
                                 <div>{Number.isFinite(price) ? `$${price.toFixed(2)}` : '—'}</div>
-                                {h.priceLastUpdated && (
+                                {g.priceLastUpdated && (
                                   <div className="text-[10px] text-muted-foreground/70">
-                                    {new Date(h.priceLastUpdated).toLocaleString(undefined, {
-                                      month: 'short', day: 'numeric',
-                                      hour: 'numeric', minute: '2-digit',
-                                    })}
+                                    {new Date(g.priceLastUpdated).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                                   </div>
                                 )}
                               </TableCell>
+
+                              {/* Gain / Loss */}
                               <TableCell className="text-right">
                                 <GainLoss value={totalGainLoss} />
-                                {Number.isFinite(totalGainLoss) && Number.isFinite(purchase) && purchase > 0 && (
+                                {Number.isFinite(totalGainLoss) && g.avgCost > 0 && (
                                   <div className={`text-[11px] ${totalGainLoss >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                                    {totalGainLoss >= 0 ? '+' : ''}{((totalGainLoss / (purchase * qty)) * 100).toFixed(2)}%
+                                    {totalGainLoss >= 0 ? '+' : ''}{((totalGainLoss / (g.avgCost * g.totalQty)) * 100).toFixed(2)}%
                                   </div>
                                 )}
                               </TableCell>
+
+                              {/* Current Value */}
                               <TableCell className="text-right">
                                 {Number.isFinite(currentValue) ? `$${currentValue.toFixed(2)}` : '—'}
                               </TableCell>
+
+                              {/* Avg Cost Basis — clickable if multi-lot */}
                               <TableCell className="text-right">
-                                {Number.isFinite(purchase) ? `$${purchase.toFixed(2)}` : '—'}
+                                {multiLot ? (
+                                  <Popover>
+                                    <PopoverTrigger asChild>
+                                      <button className="inline-flex items-center gap-1 rounded px-1 hover:bg-muted transition-colors text-sm tabular-nums">
+                                        ${g.avgCost.toFixed(2)}
+                                        <Layers className="size-3 text-muted-foreground" />
+                                      </button>
+                                    </PopoverTrigger>
+                                    <PopoverContent side="left" className="w-72 p-3">
+                                      <p className="mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{g.ticker} · {g.lots.length} Lots</p>
+                                      <table className="w-full text-xs">
+                                        <thead>
+                                          <tr className="text-muted-foreground">
+                                            <th className="text-left pb-1">Acquired</th>
+                                            <th className="text-right pb-1">Qty</th>
+                                            <th className="text-right pb-1">Price</th>
+                                            <th className="pb-1" />
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {g.lots.map((lot) => (
+                                            editingHolding === lot._id ? (
+                                              <tr key={lot._id} className="border-t border-border">
+                                                <td className="py-1"><input className="border rounded px-1 py-0.5 text-xs w-24" type="date" value={editHoldingForm.purchaseDate} onChange={e => setEditHoldingForm({ ...editHoldingForm, purchaseDate: e.target.value })} /></td>
+                                                <td className="py-1"><input className="border rounded px-1 py-0.5 text-xs w-14 text-right" type="number" value={editHoldingForm.quantity} onChange={e => setEditHoldingForm({ ...editHoldingForm, quantity: e.target.value })} /></td>
+                                                <td className="py-1"><input className="border rounded px-1 py-0.5 text-xs w-16 text-right" type="number" value={editHoldingForm.purchasePrice} onChange={e => setEditHoldingForm({ ...editHoldingForm, purchasePrice: e.target.value })} /></td>
+                                                <td className="py-1">
+                                                  <div className="flex gap-1 justify-end">
+                                                    <button onClick={() => handleSaveHolding(lot._id)} disabled={savingHolding}><Check className="size-3 text-green-500" /></button>
+                                                    <button onClick={() => setEditingHolding(null)}><X className="size-3 text-muted-foreground" /></button>
+                                                  </div>
+                                                </td>
+                                              </tr>
+                                            ) : (
+                                              <tr key={lot._id} className="border-t border-border">
+                                                <td className="py-1 text-muted-foreground">
+                                                  {lot.purchaseDate ? new Date(lot.purchaseDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                                                </td>
+                                                <td className="py-1 text-right">{lot.quantity}</td>
+                                                <td className="py-1 text-right">${Number(lot.purchasePrice).toFixed(2)}</td>
+                                                <td className="py-1">
+                                                  <div className="flex gap-1 justify-end">
+                                                    <button onClick={() => startEditHolding(lot)}><Pencil className="size-3 text-muted-foreground hover:text-foreground" /></button>
+                                                    <button onClick={() => handleDelete(lot._id)}><Trash2 className="size-3 text-red-500" /></button>
+                                                  </div>
+                                                </td>
+                                              </tr>
+                                            )
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </PopoverContent>
+                                  </Popover>
+                                ) : (
+                                  `$${g.avgCost.toFixed(2)}`
+                                )}
                               </TableCell>
-                              <TableCell className="text-right">
-                                {Number.isFinite(qty) ? qty : '—'}
-                              </TableCell>
+
+                              {/* Quantity */}
+                              <TableCell className="text-right">{g.totalQty}</TableCell>
+
+                              {/* % of Account */}
                               <TableCell className="text-right">{percentOfAccount.toFixed(1)}%</TableCell>
+
+                              {/* Actions — single lot only (multi-lot actions live in the popover) */}
                               <TableCell className="text-right">
                                 <div className="flex items-center justify-end gap-1">
-                                  {h.notes && (
+                                  {g.notes && (
                                     <TooltipProvider>
                                       <Tooltip>
                                         <TooltipTrigger asChild>
@@ -662,19 +817,29 @@ export default function DashboardPage() {
                                             <MessageSquare className="size-4 text-muted-foreground" />
                                           </Button>
                                         </TooltipTrigger>
-                                        <TooltipContent side="left" className="max-w-[220px] text-xs">
-                                          {h.notes}
-                                        </TooltipContent>
+                                        <TooltipContent side="left" className="max-w-[220px] text-xs">{g.notes}</TooltipContent>
                                       </Tooltip>
                                     </TooltipProvider>
                                   )}
-                                  <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    onClick={() => handleDelete(h._id)}
-                                  >
-                                    <Trash2 className="size-4 text-red-500" />
-                                  </Button>
+                                  {!multiLot && (
+                                    <>
+                                      <Button size="icon" variant="ghost" onClick={() => startEditHolding(g.lots[0])}>
+                                        <Pencil className="size-4 text-muted-foreground" />
+                                      </Button>
+                                      <Button size="icon" variant="ghost" onClick={() => handleDelete(g.lots[0]._id)}>
+                                        <Trash2 className="size-4 text-red-500" />
+                                      </Button>
+                                    </>
+                                  )}
+                                  {multiLot && (
+                                    <Button size="icon" variant="ghost" onClick={() => {
+                                      if (window.confirm(`Delete all ${g.lots.length} lots of ${g.ticker}?`)) {
+                                        g.lots.forEach(l => handleDelete(l._id))
+                                      }
+                                    }}>
+                                      <Trash2 className="size-4 text-red-500" />
+                                    </Button>
+                                  )}
                                 </div>
                               </TableCell>
                             </TableRow>

@@ -16,13 +16,22 @@ async function getLivePrice(ticker) {
   }
 }
 
-// Returns { name, sector } for a ticker from company profile, or null on failure
+// Returns { name, sector } for a ticker — tries company profile first, falls back to symbol search
 async function getCompanyProfile(ticker) {
   try {
     const res = await fetch(`${FINNHUB}/stock/profile2?symbol=${ticker}&token=${FINNHUB_KEY}`);
     const data = await res.json();
-    if (!data || !data.name) return null;
-    return { name: data.name, sector: data.finnhubIndustry || '' };
+    if (data && data.name) {
+      return { name: data.name, sector: data.finnhubIndustry || '' };
+    }
+    // Fallback: symbol search covers ETFs, crypto, etc.
+    const searchRes = await fetch(`${FINNHUB}/search?q=${ticker}&token=${FINNHUB_KEY}`);
+    const searchData = await searchRes.json();
+    const match = searchData?.result?.find(r => r.symbol === ticker) ?? searchData?.result?.[0];
+    if (match) {
+      return { name: match.description || match.displaySymbol || ticker, sector: '' };
+    }
+    return null;
   } catch {
     return null;
   }

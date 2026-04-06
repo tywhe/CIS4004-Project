@@ -311,7 +311,7 @@ export default function DashboardPage() {
       sector: h.sector ?? '',
       quantity: h.quantity ?? '',
       purchasePrice: h.purchasePrice ?? '',
-      purchaseDate: h.purchaseDate ? new Date(h.purchaseDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+      purchaseDate: h.purchaseDate ? String(h.purchaseDate).slice(0, 10) : new Date().toISOString().slice(0, 10),
       notes: h.notes ?? '',
     })
   }
@@ -1012,7 +1012,7 @@ export default function DashboardPage() {
                                         ) : (
                                           <tr key={lot._id} className="border-t border-border">
                                             <td className="py-1 text-muted-foreground">
-                                              {lot.purchaseDate ? new Date(lot.purchaseDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                                              {lot.purchaseDate ? (() => { const d = new Date(lot.purchaseDate); return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) })() : '—'}
                                             </td>
                                             <td className="py-1 text-right">{lot.quantity}</td>
                                             <td className="py-1 text-right">${Number(lot.purchasePrice).toFixed(2)}</td>

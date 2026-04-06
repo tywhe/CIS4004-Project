@@ -560,10 +560,10 @@ export default function DashboardPage() {
                       <TableRow className="hover:bg-transparent">
                         <SortHead>Symbol</SortHead>
                         <SortHead>Name</SortHead>
-                        <SortHead>Asset Class</SortHead>
+                        <SortHead className="w-16">Type</SortHead>
                         <SortHead>Sector</SortHead>
                         <SortHead className="text-right">Last Price</SortHead>
-                        <SortHead className="text-right">Total Gain/Loss</SortHead>
+                        <SortHead className="text-right">Gain / Loss</SortHead>
                         <SortHead className="text-right">Current Value</SortHead>
                         <SortHead className="text-right">Purchase Price</SortHead>
                         <SortHead className="text-right">Quantity</SortHead>
@@ -602,9 +602,27 @@ export default function DashboardPage() {
                           return (
                             <TableRow key={h._id ?? h.ticker}>
                               <TableCell className="font-semibold">{h.ticker}</TableCell>
-                              <TableCell className="text-muted-foreground">{h.name}</TableCell>
-                              <TableCell className="capitalize text-muted-foreground">{h.assetClass ?? '—'}</TableCell>
-                              <TableCell className="text-muted-foreground">{h.sector || '—'}</TableCell>
+                              <TableCell className="max-w-[130px] text-muted-foreground">
+                                {h.name && h.name.length > 18 ? (
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger className="block max-w-full truncate text-left">{h.name}</TooltipTrigger>
+                                      <TooltipContent side="top" className="text-xs">{h.name}</TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                ) : (h.name || '—')}
+                              </TableCell>
+                              <TableCell className="w-16 capitalize text-muted-foreground text-xs">{h.assetClass ?? '—'}</TableCell>
+                              <TableCell className="max-w-[120px] text-muted-foreground">
+                                {h.sector && h.sector.length > 16 ? (
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger className="block max-w-full truncate text-left">{h.sector}</TooltipTrigger>
+                                      <TooltipContent side="top" className="text-xs">{h.sector}</TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                ) : (h.sector || '—')}
+                              </TableCell>
                               <TableCell className="text-right">
                                 <div>{Number.isFinite(price) ? `$${price.toFixed(2)}` : '—'}</div>
                                 {h.priceLastUpdated && (
@@ -618,6 +636,11 @@ export default function DashboardPage() {
                               </TableCell>
                               <TableCell className="text-right">
                                 <GainLoss value={totalGainLoss} />
+                                {Number.isFinite(totalGainLoss) && Number.isFinite(purchase) && purchase > 0 && (
+                                  <div className={`text-[11px] ${totalGainLoss >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                    {totalGainLoss >= 0 ? '+' : ''}{((totalGainLoss / (purchase * qty)) * 100).toFixed(2)}%
+                                  </div>
+                                )}
                               </TableCell>
                               <TableCell className="text-right">
                                 {Number.isFinite(currentValue) ? `$${currentValue.toFixed(2)}` : '—'}

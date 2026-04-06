@@ -86,6 +86,13 @@ export default function DashboardPage() {
   const [portfolioError, setPortfolioError] = useState('')
   const [lookupLoading, setLookupLoading] = useState(false)
   const [lookupError, setLookupError] = useState('')
+  const [simulations, setSimulations] = useState([])
+  const [simulationsLoading, setSimulationsLoading] = useState(true)
+  const [showSimulationForm, setShowSimulationForm] = useState(false)
+  const [savingSimulation, setSavingSimulation] = useState(false)
+  const [simulationForm, setSimulationForm] = useState({
+    simulationName: '', portfolioId: '', growthRate: '', timeHorizon: ''
+  })
 
   const USER_ID = localStorage.getItem('userId')
 
@@ -106,6 +113,7 @@ export default function DashboardPage() {
     document.title = 'BloomBoard'
     fetchHoldings()
     fetchPortfolios()
+    fetchSimulations()
   }, [gate])
 
   async function fetchHoldings() {
@@ -344,6 +352,64 @@ export default function DashboardPage() {
     } catch (err) {
       console.error('Failed to update portfolio', err)
       setPortfolioError('Could not reach the server.')
+    }
+  }
+
+  async function fetchSimulations() {
+    setSimulationsLoading(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/simulations/${USER_ID}`)
+      const data = await res.json()
+      setSimulations(data)
+    } catch (err) {
+      console.error('Failed to fetch simulations', err)
+    } finally {
+      setSimulationsLoading(false)
+    }
+  }
+
+  async function handleAddSimulation() {
+    if (!simulationForm.simulationName || !simulationForm.portfolioId || !simulationForm.growthRate || !simulationForm.timeHorizon) return
+    setSavingSimulation(true)
+    try {
+      // Get current portfolio value
+      const holdingsRes = await fetch(`${API_BASE}/api/holdings/${simulationForm.portfolioId}`)
+      const holdingsData = await holdingsRes.json()
+      const currentValue = holdingsData.reduce((sum, h) => sum + (h.currentPrice || h.purchasePrice) * h.quantity, 0)
+
+      // Calculate projected value: FV = PV * (1 + r)^t
+      const growthRate = parseFloat(simulationForm.growthRate) / 100
+      const timeHorizon = parseFloat(simulationForm.timeHorizon)
+      const projectedValue = currentValue * Math.pow(1 + growthRate, timeHorizon)
+
+      const res = await fetch(`${API_BASE}/api/simulations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...simulationForm,
+          userId: USER_ID,
+          growthRate: parseFloat(simulationForm.growthRate),
+          timeHorizon,
+          projectedValue
+        })
+      })
+      const newSimulation = await res.json()
+      setSimulations([newSimulation, ...simulations])
+      setSimulationForm({ simulationName: '', portfolioId: '', growthRate: '', timeHorizon: '' })
+      setShowSimulationForm(false)
+    } catch (err) {
+      console.error('Failed to add simulation', err)
+    } finally {
+      setSavingSimulation(false)
+    }
+  }
+
+  async function handleDeleteSimulation(id) {
+    try {
+      await fetch(`${API_BASE}/api/simulations/${id}`, { method: 'DELETE' })
+      setSimulations(simulations.filter(s => s._id !== id))
+    } catch (err) {
+      console.error('Failed to delete simulation', err)
     }
   }
 
@@ -778,9 +844,109 @@ export default function DashboardPage() {
               </TabsContent>
 
               <TabsContent value="simulations" className="mt-6">
-                <div className="flex min-h-[240px] items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 px-4 py-12 text-center text-sm text-muted-foreground">
-                  Simulations — add content here later.
+                <div className="flex justify-between items-center mb-4">
+                  <p className="text-sm text-muted-foreground">
+                    {simulations.length} simulation{simulations.length !== 1 ? 's' : ''}
+                  </p>
+                  <Button size="sm" onClick={() => setShowSimulationForm(!showSimulationForm)}>
+                    <Plus className="size-4 mr-1" /> New Simulation
+                  </Button>
                 </div>
+
+                {showSimulationForm && (
+                  <Card className="p-4 mb-4 flex flex-wrap gap-3 items-end">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-muted-foreground">Simulation Name</label>
+                      <input
+                        className="border rounded px-2 py-1 text-sm w-40 bg-background"
+                        placeholder="10 Year Growth"
+                        value={simulationForm.simulationName}
+                        onChange={e => setSimulationForm({ ...simulationForm, simulationName: e.target.value })}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-muted-foreground">Portfolio</label>
+                      <select
+                        className="border rounded px-2 py-1 text-sm w-40 bg-background text-foreground"
+                        value={simulationForm.portfolioId}
+                        onChange={e => setSimulationForm({ ...simulationForm, portfolioId: e.target.value })}
+                      >
+                        <option value="">Select portfolio</option>
+                        {portfolios.map(p => (
+                          <option key={p._id} value={p._id}>{p.portfolioName}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-muted-foreground">Growth Rate (%)</label>
+                      <input
+                        className="border rounded px-2 py-1 text-sm w-24 bg-background"
+                        placeholder="7"
+                        type="number"
+                        value={simulationForm.growthRate}
+                        onChange={e => setSimulationForm({ ...simulationForm, growthRate: e.target.value })}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs text-muted-foreground">Time Horizon (years)</label>
+                      <input
+                        className="border rounded px-2 py-1 text-sm w-24 bg-background"
+                        placeholder="10"
+                        type="number"
+                        value={simulationForm.timeHorizon}
+                        onChange={e => setSimulationForm({ ...simulationForm, timeHorizon: e.target.value })}
+                      />
+                    </div>
+                    <Button size="sm" onClick={handleAddSimulation} disabled={savingSimulation}>
+                      {savingSimulation ? 'Running...' : 'Run Simulation'}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setShowSimulationForm(false)}>Cancel</Button>
+                  </Card>
+                )}
+
+                {simulationsLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading simulations...</p>
+                ) : simulations.length === 0 ? (
+                  <div className="flex min-h-[240px] items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 px-4 py-12 text-center text-sm text-muted-foreground">
+                    No simulations yet — click New Simulation to get started.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {simulations.map(s => {
+                      const portfolio = portfolios.find(p => p._id === s.portfolioId)
+                      return (
+                        <Card key={s._id} className="p-4 flex flex-col gap-3">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <h3 className="font-semibold text-foreground">{s.simulationName}</h3>
+                              <span className="text-xs text-muted-foreground">{portfolio?.portfolioName || 'Unknown portfolio'}</span>
+                            </div>
+                            <Button size="icon" variant="ghost" onClick={() => handleDeleteSimulation(s._id)}>
+                              <Trash2 className="size-4 text-red-500" />
+                            </Button>
+                          </div>
+                          <div className="flex flex-col gap-1 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Growth Rate</span>
+                              <span className="font-medium">{s.growthRate}%</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Time Horizon</span>
+                              <span className="font-medium">{s.timeHorizon} years</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Projected Value</span>
+                              <span className="font-semibold text-green-500">${s.projectedValue.toFixed(2)}</span>
+                            </div>
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            Run {new Date(s.createdAt).toLocaleDateString()}
+                          </div>
+                        </Card>
+                      )
+                    })}
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
       </div>

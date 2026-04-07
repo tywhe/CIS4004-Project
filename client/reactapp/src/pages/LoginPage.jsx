@@ -65,7 +65,20 @@ export default function LoginPage() {
 
   return (
     <main className="flex min-h-screen items-center justify-center p-6">
-      <Card className="w-full max-w-md shadow-md">
+      <div className="flex w-full max-w-md flex-col items-center">
+        {/* Logo + App Name */}
+        <div className="mb-6 flex flex-col items-center gap-2">
+          <img
+            src="/logo.svg"
+            alt="BloomBoard logo"
+            style={{ width: 80, height: 80 }}
+          />
+          <span className="text-3xl font-semibold tracking-tight text-foreground">
+            BloomBoard
+          </span>
+        </div>
+
+      <Card className="w-full shadow-md">
         <CardHeader className="space-y-1 text-center">
           <CardTitle className="text-2xl font-semibold tracking-tight">Sign in</CardTitle>
           <CardDescription>
@@ -127,6 +140,7 @@ export default function LoginPage() {
           </span>
         </CardFooter>
       </Card>
+      </div>
     </main>
   )
 }

@@ -60,29 +60,6 @@ Users>
 
 How To Start The Application
 
-1. Open the terminal in the project root folder
-2. Have MongoDB be running locally
-3. Run: npm install
-4. Run: npm run build
-5. Run: npm start
+1. Go to this link! https://cis4004-project.onrender.com/
 
-A second server is not needed for React.
-
-How To Navigate To The Application
-
-After starting the server, open:
-http://localhost:8080/
-
-1. Make sure MongoDB is running locally
-2. The MongoDB database used is: 
-	portfolio
-3. The server connects using: 
-	mongodb://localhost:27017/portfolio 
-4. Ensure database is available in MondoDB before running
-5. Collection needed is: 
-	- users
-	- portfolios
-	- holdings
-	- watchlists
-	- simulations
 

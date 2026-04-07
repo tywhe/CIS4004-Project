@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none">
+  <!-- Left outer petal -->
+  <path
+    fill="#8fac8f"
+    d="M65 48
+       C50 52 40 66 44 82
+       C48 98 60 110 68 118
+       C69 112 70 105 72 95
+       C76 76 72 60 65 48Z"
+  />
+  <!-- Right outer petal -->
+  <path
+    fill="#8fac8f"
+    d="M135 48
+       C150 52 160 66 156 82
+       C152 98 140 110 132 118
+       C131 112 130 105 128 95
+       C124 76 128 60 135 48Z"
+  />
+  <!-- Center petal -->
+  <path
+    fill="#8fac8f"
+    d="M100 60
+       C78 75 66 96 68 118
+       C70 140 85 155 100 155
+       C115 155 130 140 132 118
+       C134 96 122 75 100 60Z"
+  />
+  <!-- Left inner petal overlap (darker tone for depth) -->
+  <path
+    fill="#7a9a7a"
+    d="M68 118
+       C70 108 74 98 100 88
+       L100 60
+       C78 75 66 96 68 118Z"
+  />
+  <!-- Right inner petal overlap -->
+  <path
+    fill="#7a9a7a"
+    d="M132 118
+       C130 108 126 98 100 88
+       L100 60
+       C122 75 134 96 132 118Z"
+  />
+</svg>

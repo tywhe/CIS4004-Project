@@ -16,8 +16,9 @@ export default function DashboardShell({ children }) {
           <div className="mx-auto flex w-full max-w-[1280px] items-center gap-3">
             <Link
               to={homePath}
-              className="flex-1 text-lg font-semibold tracking-tight text-foreground hover:opacity-80 transition-opacity"
+              className="flex-1 flex items-center gap-2 text-lg font-semibold tracking-tight text-foreground hover:opacity-80 transition-opacity"
             >
+              <img src="/logo.svg" alt="" aria-hidden="true" style={{ width: 24, height: 24 }} />
               BloomBoard
             </Link>
 

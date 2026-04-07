@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { LineChart, Line, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import { useNavigate } from 'react-router-dom'
-import { ChevronDown, ChevronUp, Plus, Trash2, RefreshCw, Pencil, MessageSquare, Check, X, Layers, TrendingUp } from 'lucide-react'
+import { ChevronDown, ChevronUp, Plus, Trash2, RefreshCw, Pencil, MessageSquare, Check, X, Layers, TrendingUp, Share2, Users } from 'lucide-react'
 import DashboardShell from '@/components/DashboardShell.jsx'
 import { HoldingsCompositionCard } from '@/components/HoldingsCompositionCard.jsx'
 import { Button } from '@/components/ui/button'
@@ -126,6 +126,10 @@ export default function DashboardPage() {
   const [selectedPortfolioId, setSelectedPortfolioId] = useState(null)
   const [holdingsError, setHoldingsError] = useState('')
   const [portfolioError, setPortfolioError] = useState('')
+  const [sharingPortfolioId, setSharingPortfolioId] = useState(null)
+  const [shareUsername, setShareUsername] = useState('')
+  const [shareStatus, setShareStatus] = useState(null) // { type: 'success'|'error', message }
+  const [sharingLoading, setSharingLoading] = useState(false)
   const [lookupLoading, setLookupLoading] = useState(false)
   const [lookupError, setLookupError] = useState('')
   const [editingHolding, setEditingHolding] = useState(null) // _id of row being edited
@@ -292,6 +296,8 @@ export default function DashboardPage() {
     }
     setPortfoliosLoading(true)
     try {
+      // Ensure existing portfolios have UserPortfolio join records (safe to call every time)
+      await fetch(`${API_BASE}/api/portfolios/migrate/${USER_ID}`, { method: 'POST' })
       const res = await fetch(`${API_BASE}/api/portfolios/${USER_ID}`)
       const data = await res.json()
       setPortfolios(data)
@@ -299,6 +305,30 @@ export default function DashboardPage() {
       console.error('Failed to fetch portfolios', err)
     } finally {
       setPortfoliosLoading(false)
+    }
+  }
+
+  async function handleShare(portfolioId) {
+    if (!shareUsername.trim()) return
+    setSharingLoading(true)
+    setShareStatus(null)
+    try {
+      const res = await fetch(`${API_BASE}/api/portfolios/${portfolioId}/share`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: shareUsername.trim(), requestingUserId: USER_ID }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setShareStatus({ type: 'error', message: data.error ?? 'Could not share portfolio.' })
+      } else {
+        setShareStatus({ type: 'success', message: data.message })
+        setShareUsername('')
+      }
+    } catch {
+      setShareStatus({ type: 'error', message: 'Could not reach the server.' })
+    } finally {
+      setSharingLoading(false)
     }
   }
 
@@ -1224,34 +1254,86 @@ export default function DashboardPage() {
                           )}
                         </div>
                         <div className="flex shrink-0">
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="ghost"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setPortfolioError('')
-                              setEditingPortfolio(pId)
-                              setEditForm({ portfolioName: p.portfolioName, portfolioType: p.portfolioType })
-                            }}
-                          >
-                            <Pencil className="size-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="ghost"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleDeletePortfolio(pId)
-                            }}
-                          >
-                            <Trash2 className="size-4 text-red-500" />
-                          </Button>
+                          {p.role === 'owner' && (
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              title="Share portfolio"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setSharingPortfolioId(sharingPortfolioId === pId ? null : pId)
+                                setShareUsername('')
+                                setShareStatus(null)
+                              }}
+                            >
+                              <Share2 className="size-4 text-muted-foreground" />
+                            </Button>
+                          )}
+                          {p.role === 'owner' && (
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setPortfolioError('')
+                                setEditingPortfolio(pId)
+                                setEditForm({ portfolioName: p.portfolioName, portfolioType: p.portfolioType })
+                              }}
+                            >
+                              <Pencil className="size-4" />
+                            </Button>
+                          )}
+                          {p.role === 'owner' && (
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDeletePortfolio(pId)
+                              }}
+                            >
+                              <Trash2 className="size-4 text-red-500" />
+                            </Button>
+                          )}
                         </div>
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        Created {new Date(p.createdAt).toLocaleDateString()}
+
+                      {/* Share form — visible only to owner when share icon is clicked */}
+                      {sharingPortfolioId === pId && (
+                        <div className="mt-1" onClick={e => e.stopPropagation()}>
+                          <p className="text-xs font-medium text-foreground mb-1 flex items-center gap-1">
+                            <Users className="size-3" /> Share with user
+                          </p>
+                          <div className="flex gap-2">
+                            <input
+                              className="border rounded px-2 py-1 text-sm flex-1 bg-background"
+                              placeholder="Username"
+                              value={shareUsername}
+                              onChange={e => setShareUsername(e.target.value)}
+                              onKeyDown={e => e.key === 'Enter' && handleShare(pId)}
+                            />
+                            <Button type="button" size="sm" disabled={sharingLoading || !shareUsername.trim()} onClick={() => handleShare(pId)}>
+                              {sharingLoading ? 'Sharing...' : 'Share'}
+                            </Button>
+                          </div>
+                          {shareStatus && (
+                            <p className={`mt-1 text-xs ${shareStatus.type === 'success' ? 'text-green-500' : 'text-destructive'}`}>
+                              {shareStatus.message}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>Created {new Date(p.createdAt).toLocaleDateString()}</span>
+                        {p.role === 'viewer' && (
+                          <span className="flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-blue-500 text-[11px]">
+                            <Users className="size-3" /> Shared with you
+                          </span>
+                        )}
                       </div>
                     </Card>
                   )

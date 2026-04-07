@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Holding = require('../models/Holding');
+const UserPortfolio = require('../models/UserPortfolio');
 
 const FINNHUB_KEY = process.env.FINNHUB_API_KEY;
 const FINNHUB = 'https://finnhub.io/api/v1';
@@ -64,9 +65,8 @@ router.get('/lookup/:ticker', async (req, res) => {
 // Refresh live prices for all of a user's holdings (skips holdings updated within the last hour)
 router.post('/user/:userId/refresh', async (req, res) => {
   try {
-    const Portfolio = require('../models/Portfolio');
-    const portfolios = await Portfolio.find({ userId: req.params.userId });
-    const portfolioIds = portfolios.map(p => p._id);
+    const memberships = await UserPortfolio.find({ userId: req.params.userId });
+    const portfolioIds = memberships.map(m => m.portfolioId);
     const holdings = await Holding.find({ portfolioId: { $in: portfolioIds } });
 
     const ONE_HOUR = 60 * 60 * 1000;
@@ -90,12 +90,11 @@ router.post('/user/:userId/refresh', async (req, res) => {
   }
 });
 
-// Get all holdings for a user across all portfolios
+// Get all holdings for a user across all portfolios (owned + shared)
 router.get('/user/:userId', async (req, res) => {
   try {
-    const Portfolio = require('../models/Portfolio');
-    const portfolios = await Portfolio.find({ userId: req.params.userId });
-    const portfolioIds = portfolios.map(p => p._id);
+    const memberships = await UserPortfolio.find({ userId: req.params.userId });
+    const portfolioIds = memberships.map(m => m.portfolioId);
     const holdings = await Holding.find({ portfolioId: { $in: portfolioIds } });
     res.json(holdings);
   } catch (err) {

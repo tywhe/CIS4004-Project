@@ -23,6 +23,7 @@ mongoose.connect(process.env.MONGODB_URI, {
 // Models
 const User = require('./models/User');
 const Portfolio = require('./models/Portfolio');
+const UserPortfolio = require('./models/UserPortfolio');
 const Holding = require('./models/Holding');
 const Simulation = require('./models/Simulation');
 const Watchlist = require('./models/Watchlist');

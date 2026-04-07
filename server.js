@@ -1,4 +1,4 @@
-require('dotenv').config();
+try { require('dotenv').config(); } catch (_) { /* not needed in production */ }
 
 const express = require('express');
 const fs = require('fs');

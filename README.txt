@@ -1,65 +1,112 @@
-README
+README.txt
 
-BloomBoard — Project Overview
+BloomBoard
+
+Project Overview
+BloomBoard is a web-based portfolio planning application for the self-directed investor. It is designed as a tool where users can model, compare, and simulate investment strategies across multiple accounts in one place. BloomBoard does not connect to brokerages or execute trades. Instead, it focuses on planning, tracking, and portfolio analysis.
 
 Purpose
-BloomBoard is a web-based portfolio planning application designed for the self-directed investor. It serves as a purpose-built replacement for the investment spreadsheet — more powerful than Excel, more flexible than a brokerage's built-in tracker, and focused entirely on planning and strategy rather than execution.
-BloomBoard does not connect to brokerages or execute trades. It is a thinking tool — a place to model, compare, and simulate investment strategies across all of a user's accounts in one place.
-
-The Problem It Solves
-Most active investors maintain some form of spreadsheet alongside their brokerage accounts. Their brokerage tells them what they own, but not how it compares to their ideal strategy, how it might perform over time, or how it stacks up against a theoretical alternative. BloomBoard fills that gap.
+Many active investors use spreadsheets alongside their brokerage accounts to track portfolio strategy, compare actual allocations to ideal targets, and model future growth. BloomBoard provides a central place to manage, compare, and evaluate investment ideas.
 
 Target Audience
-The self-directed, research-oriented investor who actively thinks about portfolio strategy and allocation. Someone who already keeps — or wishes they kept — an investment spreadsheet.
+BloomBoard is intended for self-directed, research-oriented investors who actively think about portfolio strategy and allocation.
 
 Core Features
-Portfolio Sheets
-Users can create multiple named portfolio sheets, each accessible via its own tab. A sheet might represent a real brokerage account (e.g. "Fidelity"), a retirement account (e.g. "Roth IRA"), or a theoretical strategy (e.g. "Dream Portfolio"). Each sheet is tagged as either actual or theoretical.
-
-Holdings Management
-Each sheet contains a table of holdings with full CRUD functionality. Each holding tracks: ticker symbol, asset name, asset class, sector/basket, quantity, purchase price, current price, price last updated, and optional notes. Current value and percentage of portfolio are calculated automatically.
-
-Live Price Lookup
-Users can optionally pull current stock prices via API, or enter prices manually. A visible timestamp shows when prices were last refreshed.
-
-Sheet Comparison
-Users can compare any two portfolio sheets side by side — for example, their actual Fidelity holdings versus their theoretical target portfolio. 
-
-Scenario Simulation
-Users can run simple simulations against any sheet — for example, applying an 8% annual growth rate over 10 years — to project future portfolio value. 
+- User registration and login
+- Portfolio management
+- Holdings management
+- Watchlist tracking
+- Simulations
+- Settings and password update
+- Role-based access for users and admins
 
 Technical Stack
-BloomBoard is built on the MERN stack — MongoDB, Express, React, and Node.js. Stock price data is sourced from API. Authentication is handled via a simple email and password login.
+Frontend:
+React, Vite, Tailwind CSS, shadcn/ui, Recharts
 
+Backend:
+Node.js, Express.js
+
+Database:
+MongoDB
+
+Price Data:
+Finnhub API
+
+Deployment:
+Render
 
 Data Model
-Three core collections in MongoDB: Users, Portfolios, and Holdings. Each user owns multiple portfolios. Each portfolio contains multiple holdings. Calculated fields such as current value and percentage of portfolio are derived on the frontend rather than stored.
+Users
+- username
+- userPassword
+- userRole
 
-Users>
-	-username
-	-userPassword
-	-userRole (user or admin)
-		
-		Portfolios>
-			-portfolioName
-			-portfolioType (investment, theoretical, retirement)
-			-userid
+Relationships
+- User → Portfolios: one-to-many
+- Users ↔ Portfolios: many-to-many through UserPortfolio
+- Portfolio → Holdings: one-to-many
+- Portfolio → Simulations: one-to-many
+- User → Watchlist: one-to-many
 
-			Holdings>
-				-portfolioId
-				-ticker
-				-name
-				-assetClass
-				-sector/basket (optional)
-				-quantity
-				-purchasePrice (manually entered or entered with current price at time of entry)
-				-currentPrice
-				-priceLastUpdated
-				-notes (optional)
+Portfolios
+- portfolioName
+- portfolioType
+- userId
 
+UserPortfolio
+- userId
+- portfolioId
+- role
 
-How To Start The Application
+Holdings
+- portfolioId
+- ticker
+- name
+- assetClass
+- sector
+- quantity
+- purchasePrice
+- purchaseDate
+- currentPrice
+- priceLastUpdated
+- notes
 
-1. Go to this link! https://cis4004-project.onrender.com/
+Simulations
+- portfolioId
+- growthRate
+- timeHorizon
+- projectedValue
+- createdAt
+
+Watchlist
+- userId
+- ticker
+- name
+- assetClass
+- notes
+- addedAt
+
+How to Start the Web Server
+The project is deployed online. No local setup is required for grading.
+
+Open the application here:
+https://cis4004-project.onrender.com/
+
+Is a Second Server Needed for the React Application?
+No.
+A second server is not needed because the deployed application is already hosted and accessible through the Render link.
+
+How to Navigate to the Application
+Open the deployed application in a browser at:
+https://cis4004-project.onrender.com/
+
+What Collections Are Needed in MongoDB?
+- users
+- portfolios
+- userportfolios
+- holdings
+- simulations
+- watchlists
 
 

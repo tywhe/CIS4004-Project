@@ -614,7 +614,8 @@ export default function DashboardPage() {
           userId: USER_ID,
           growthRate: parseFloat(simulationForm.growthRate),
           timeHorizon,
-          projectedValue
+          projectedValue,
+          startingValue: currentValue,
         })
       })
       const newSimulation = await res.json()
@@ -1615,14 +1616,18 @@ export default function DashboardPage() {
                   const rate = Number(s.growthRate) / 100
                   const years = Number(s.timeHorizon)
                   const projected = Number(s.projectedValue)
-                  // Derive starting value: PV = FV / (1+r)^t
-                  const startValue = rate !== 0 ? projected / Math.pow(1 + rate, years) : projected
+                  // Use stored startingValue when available; safe fallback avoids 0/0 for -100% growth
+                  const startValue = Number.isFinite(Number(s.startingValue)) && s.startingValue !== null
+                    ? Number(s.startingValue)
+                    : (rate !== -1 && rate !== 0
+                        ? projected / Math.pow(1 + rate, years)
+                        : projected)
                   const totalGain = projected - startValue
-                  const isLoss = totalGain < 0
+                  const isLoss = rate < 0
                   const accentGreen = 'oklch(0.55 0.15 152)'
                   const accentRed = 'oklch(0.55 0.20 27)'
                   const accentColor = isLoss ? accentRed : accentGreen
-                  const multiplier = startValue > 0 ? projected / startValue : 1
+                  const multiplier = startValue > 0 ? projected / startValue : 0
                   const halfwayYear = Math.round(years / 2)
 
                   // Build year-by-year sparkline data
@@ -1718,13 +1723,14 @@ export default function DashboardPage() {
                         <div className="flex flex-col items-center py-2.5 px-1">
                           <span className="text-[10px] uppercase tracking-wide text-muted-foreground">At 50%</span>
                           <span className={`text-sm font-semibold tabular-nums ${isLoss ? 'text-red-500' : 'text-green-500'}`}>
-                            ${(startValue * Math.pow(1 + rate, halfwayYear)).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            {halfwayYear > 0
+                              ? `$${(startValue * Math.pow(1 + rate, halfwayYear)).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+                              : '—'}
                           </span>
                           <span className="text-[10px] text-muted-foreground">yr {halfwayYear}</span>
                         </div>
                       </div>
 
-                      {/* Progress bar: current vs projected */}
                       <div className="px-4 pb-3 pt-2 border-t border-border/60">
                         <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
                           <span>Starting value</span>
@@ -1734,8 +1740,10 @@ export default function DashboardPage() {
                           <div
                             className={`h-full rounded-full ${isLoss ? 'bg-red-500' : 'bg-green-500'}`}
                             style={{ width: isLoss
-                              ? `${Math.min((projected / startValue) * 100, 100).toFixed(1)}%`
-                              : `${Math.min((startValue / projected) * 100, 100).toFixed(1)}%`
+                              // For losses: show how much value remains (0% = total loss, 100% = break-even)
+                              ? `${startValue > 0 ? Math.min(Math.max((projected / startValue) * 100, 0), 100).toFixed(1) : 0}%`
+                              // For gains: show starting value as fraction of projected end
+                              : `${projected > 0 ? Math.min((startValue / projected) * 100, 100).toFixed(1) : 100}%`
                             }}
                           />
                         </div>

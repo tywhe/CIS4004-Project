@@ -6,7 +6,8 @@ const SimulationSchema = new mongoose.Schema({
   simulationName: { type: String, required: true },
   growthRate: { type: Number, required: true },
   timeHorizon: { type: Number, required: true },
-  projectedValue: { type: Number, required: true }
+  projectedValue: { type: Number, required: true },
+  startingValue: { type: Number, default: null }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Simulation', SimulationSchema);

@@ -8,6 +8,9 @@
     "start": "node server.js",
     "dev": "npm run dev --prefix client/reactapp"
   },
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.2",
     "bcryptjs": "^3.0.3",

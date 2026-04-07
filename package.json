@@ -4,7 +4,7 @@
   "description": "Portfolio app — Express serves the Vite/React production build",
   "main": "server.js",
   "scripts": {
-    "build": "npm run build --prefix client/reactapp",
+    "build": "npm install --prefix client/reactapp && npm run build --prefix client/reactapp",
     "start": "node server.js",
     "dev": "npm run dev --prefix client/reactapp"
   },
